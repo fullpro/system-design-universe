@@ -32,17 +32,16 @@ export function TopBar() {
   const active: ViewMode = mode === "internals" ? "map" : mode;
 
   return (
-    <header className="absolute inset-x-2 top-2 z-40 flex items-center justify-between gap-2 sm:inset-x-3 sm:top-3">
-      {/* Brand */}
+    <header className="absolute inset-x-2 top-2 z-40 flex items-center gap-1.5 sm:inset-x-3 sm:top-3 sm:justify-between sm:gap-2">
+      {/* Brand — icon-only on mobile */}
       <div className="glass sheen flex shrink-0 items-center gap-2 rounded-2xl px-2.5 py-2 sm:gap-2.5 sm:px-3.5">
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg sm:h-8 sm:w-8 sm:rounded-xl" style={{ background: "rgba(99,102,241,0.18)", color: "#a5b4fc", border: "1px solid rgba(99,102,241,0.35)" }}>
           <Orbit size={16} strokeWidth={1.8} className="sm:hidden" />
           <Orbit size={18} strokeWidth={1.8} className="hidden sm:block" />
         </span>
-        <div className="leading-tight">
-          <div className="whitespace-nowrap text-[12px] font-bold tracking-tight sm:text-[14px]" style={{ color: "var(--text)" }}>
-            <span className="sm:hidden">SDU</span>
-            <span className="hidden sm:inline">System Design Universe</span>
+        <div className="hidden leading-tight sm:block">
+          <div className="whitespace-nowrap text-[14px] font-bold tracking-tight" style={{ color: "var(--text)" }}>
+            System Design Universe
           </div>
           <div className="hidden whitespace-nowrap text-[10px] xl:block" style={{ color: "var(--text-faint)" }}>
             Explore how every concept fits together
@@ -51,7 +50,7 @@ export function TopBar() {
       </div>
 
       {/* Mode switcher */}
-      <div className="glass sheen flex min-w-0 items-center gap-0.5 overflow-x-auto rounded-2xl p-1 sm:gap-1">
+      <div className="glass sheen flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto rounded-2xl p-1 sm:flex-initial sm:gap-1">
         {TABS.map((tab) => {
           const isActive = active === tab.id;
           return (
@@ -79,11 +78,11 @@ export function TopBar() {
         })}
       </div>
 
-      {/* Help */}
-      <div className="relative">
+      {/* Help — hidden on mobile to save tab bar space */}
+      <div className="relative hidden sm:block">
         <button
           onClick={() => setHelpOpen((o) => !o)}
-          className="glass sheen flex h-9 items-center gap-1.5 rounded-2xl px-2.5 text-[13px] font-medium transition-colors hover:brightness-125 sm:h-10 sm:px-3"
+          className="glass sheen flex h-10 items-center gap-1.5 rounded-2xl px-3 text-[13px] font-medium transition-colors hover:brightness-125"
           style={{ color: "var(--text-dim)" }}
         >
           <HelpCircle size={16} /> <span className="hidden md:inline">Guide</span>

@@ -17,41 +17,34 @@ import { LearnGallery } from "./panels/LearnGallery";
 import { ReasonWorkspace } from "./reason/ReasonWorkspace";
 import { Studio } from "./studio/Studio";
 
-function HintPill() {
+function BottomCTA() {
+  const startJourney = useUniverse((s) => s.startJourney);
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 12 }}
-      transition={{ delay: 0.4 }}
-      className="glass sheen absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full px-3 py-2 text-[11px] sm:bottom-4 sm:px-4 sm:text-[12px]"
-      style={{ color: "var(--text-dim)" }}
+      transition={{ delay: 0.3 }}
+      className="absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-2 pb-[max(12px,env(safe-area-inset-bottom))] sm:pb-4"
     >
-      <MousePointerClick size={14} className="shrink-0" style={{ color: "#a5b4fc" }} />
-      <span className="sm:hidden">Tap a node · pinch to zoom</span>
-      <span className="hidden sm:inline">Click any node to dive in · scroll to zoom · drag to pan</span>
+      <motion.button
+        onClick={startJourney}
+        className="glass sheen flex items-center gap-2 whitespace-nowrap rounded-full px-4 py-2 text-[12px] font-semibold transition-all hover:brightness-110 sm:px-5 sm:py-2.5 sm:text-[13px]"
+        style={{ background: "rgba(99,102,241,0.25)", border: "1px solid rgba(99,102,241,0.5)", color: "#c7d2fe" }}
+      >
+        <Send size={15} className="shrink-0" />
+        <span className="sm:hidden">Send a request</span>
+        <span className="hidden sm:inline">Send a request through the system</span>
+        <span className="hidden rounded-md px-1.5 py-0.5 font-mono text-[10px] sm:inline-block" style={{ background: "rgba(255,255,255,0.08)", color: "#a5b4fc" }}>
+          GET /products
+        </span>
+      </motion.button>
+      <div className="flex items-center gap-2 text-[11px] sm:text-[12px]" style={{ color: "var(--text-dim)" }}>
+        <MousePointerClick size={13} className="shrink-0" style={{ color: "#a5b4fc" }} />
+        <span className="sm:hidden">Tap a node · pinch to zoom</span>
+        <span className="hidden sm:inline">Click any node to dive in · scroll to zoom · drag to pan</span>
+      </div>
     </motion.div>
-  );
-}
-
-function LaunchRequest() {
-  const startJourney = useUniverse((s) => s.startJourney);
-  return (
-    <motion.button
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 12 }}
-      onClick={startJourney}
-      className="glass sheen absolute bottom-[72px] left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full px-4 py-2 text-[12px] font-semibold transition-all hover:brightness-110 sm:bottom-16 sm:px-5 sm:py-2.5 sm:text-[13px]"
-      style={{ background: "rgba(99,102,241,0.25)", border: "1px solid rgba(99,102,241,0.5)", color: "#c7d2fe" }}
-    >
-      <Send size={15} className="shrink-0" />
-      <span className="sm:hidden">Send a request</span>
-      <span className="hidden sm:inline">Send a request through the system</span>
-      <span className="hidden rounded-md px-1.5 py-0.5 font-mono text-[10px] sm:inline-block" style={{ background: "rgba(255,255,255,0.08)", color: "#a5b4fc" }}>
-        GET /products
-      </span>
-    </motion.button>
   );
 }
 
@@ -101,8 +94,7 @@ export function Universe() {
       <DetailPanel />
 
       <AnimatePresence>
-        {mode === "map" && !onJourney && !selected && <LaunchRequest key="launch" />}
-        {mode === "map" && !onJourney && !selected && <HintPill key="hint" />}
+        {mode === "map" && !onJourney && !selected && <BottomCTA key="bottom-cta" />}
       </AnimatePresence>
     </main>
   );
