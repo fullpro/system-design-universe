@@ -38,7 +38,7 @@ export function ComparisonView() {
   const cmp = COMPARISONS.find((c) => c.id === id) ?? COMPARISONS[0];
 
   return (
-    <div className="mx-auto max-w-[1000px] px-5 py-6">
+    <div className="mx-auto max-w-[1000px] px-3 py-4 sm:px-5 sm:py-6">
       <div className="mb-4">
         <h2 className="text-[15px] font-bold" style={{ color: "var(--text)" }}>Architecture Comparison</h2>
         <p className="text-[12px]" style={{ color: "var(--text-dim)" }}>Two options, one radar, the tradeoffs side by side.</p>

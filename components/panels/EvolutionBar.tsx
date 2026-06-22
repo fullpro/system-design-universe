@@ -118,19 +118,19 @@ export function EvolutionBar() {
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 40, opacity: 0 }}
         transition={{ type: "spring", stiffness: 300, damping: 32 }}
-        className="glass sheen absolute inset-x-3 bottom-3 z-30 rounded-3xl px-5 py-4"
+        className="glass sheen absolute inset-x-2 bottom-2 z-30 rounded-2xl px-3 py-3 sm:inset-x-3 sm:bottom-3 sm:rounded-3xl sm:px-5 sm:py-4"
       >
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 sm:gap-4">
           {/* Stage index */}
           <div className="shrink-0 text-center">
-            <div className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-faint)" }}>Stage</div>
-            <div className="text-2xl font-bold tabular-nums leading-none" style={{ color: "#a5b4fc" }}>
+            <div className="hidden text-[10px] font-semibold uppercase tracking-wider sm:block" style={{ color: "var(--text-faint)" }}>Stage</div>
+            <div className="text-xl font-bold tabular-nums leading-none sm:text-2xl" style={{ color: "#a5b4fc" }}>
               {stage + 1}<span className="text-sm" style={{ color: "var(--text-faint)" }}>/{total}</span>
             </div>
           </div>
 
           {/* Content */}
-          <div className="min-w-0 flex-1 border-l pl-4" style={{ borderColor: "var(--border)" }}>
+          <div className="min-w-0 flex-1 border-l pl-3 sm:pl-4" style={{ borderColor: "var(--border)" }}>
             <AnimatePresence mode="wait">
               <motion.div
                 key={stage}
@@ -139,13 +139,13 @@ export function EvolutionBar() {
                 exit={{ opacity: 0, x: -12 }}
                 transition={{ duration: 0.22 }}
               >
-                <div className="flex items-center gap-2.5">
-                  <h2 className="text-[15px] font-bold leading-tight" style={{ color: "var(--text)" }}>{data.title}</h2>
-                  <span className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: "rgba(99,102,241,0.16)", color: "#a5b4fc" }}>
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2.5">
+                  <h2 className="text-[13px] font-bold leading-tight sm:text-[15px]" style={{ color: "var(--text)" }}>{data.title}</h2>
+                  <span className="hidden items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium sm:flex" style={{ background: "rgba(99,102,241,0.16)", color: "#a5b4fc" }}>
                     <Zap size={9} /> {data.trigger}
                   </span>
                 </div>
-                <p className="mt-1 line-clamp-2 text-[12px] leading-snug" style={{ color: "var(--text-dim)" }}>
+                <p className="mt-1 line-clamp-2 text-[11px] leading-snug sm:text-[12px]" style={{ color: "var(--text-dim)" }}>
                   {data.narrative}
                 </p>
               </motion.div>
@@ -153,11 +153,11 @@ export function EvolutionBar() {
           </div>
 
           {/* Nav */}
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             {stage > 0 && (
               <button
                 onClick={() => setStage(0)}
-                className="flex h-9 w-9 items-center justify-center rounded-xl transition-colors hover:bg-white/10"
+                className="hidden h-9 w-9 items-center justify-center rounded-xl transition-colors hover:bg-white/10 sm:flex"
                 style={{ color: "var(--text-dim)", border: "1px solid var(--border)" }}
                 title="Restart"
               >
@@ -167,7 +167,7 @@ export function EvolutionBar() {
             <button
               onClick={prev}
               disabled={stage === 0}
-              className="flex h-9 w-9 items-center justify-center rounded-xl transition-colors enabled:hover:bg-white/10 disabled:opacity-30"
+              className="flex h-8 w-8 items-center justify-center rounded-xl transition-colors enabled:hover:bg-white/10 disabled:opacity-30 sm:h-9 sm:w-9"
               style={{ color: "var(--text-dim)", border: "1px solid var(--border)" }}
             >
               <ChevronLeft size={17} />
@@ -175,7 +175,7 @@ export function EvolutionBar() {
             <button
               onClick={next}
               disabled={stage === total - 1}
-              className="flex h-9 items-center gap-1.5 rounded-xl px-4 text-[13px] font-semibold transition-all enabled:hover:brightness-110 disabled:opacity-30"
+              className="flex h-8 items-center gap-1 rounded-xl px-3 text-[12px] font-semibold transition-all enabled:hover:brightness-110 disabled:opacity-30 sm:h-9 sm:gap-1.5 sm:px-4 sm:text-[13px]"
               style={{ background: "rgba(99,102,241,0.25)", border: "1px solid rgba(99,102,241,0.5)", color: "#c7d2fe" }}
             >
               Next <ChevronRight size={16} />
@@ -183,14 +183,14 @@ export function EvolutionBar() {
           </div>
         </div>
 
-        {/* Complexity meter — the cost of every component you add. */}
-        <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
-          <span className="text-[9.5px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-faint)" }}>
+        {/* Complexity meter */}
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 border-t pt-3 sm:gap-x-5" style={{ borderColor: "var(--border)" }}>
+          <span className="w-full text-[9.5px] font-semibold uppercase tracking-wider sm:mr-1 sm:w-auto" style={{ color: "var(--text-faint)" }}>
             Cost of complexity
           </span>
           {METERS.map((m) => (
-            <div key={m.key} className="flex min-w-[130px] flex-1 items-center gap-2">
-              <span className="w-[78px] shrink-0 text-[10px] font-medium" style={{ color: "var(--text-dim)" }}>{m.label}</span>
+            <div key={m.key} className="flex min-w-[100px] flex-1 items-center gap-2 sm:min-w-[130px]">
+              <span className="w-[60px] shrink-0 text-[10px] font-medium sm:w-[78px]" style={{ color: "var(--text-dim)" }}>{m.label}</span>
               <div className="h-1.5 flex-1 overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.08)" }}>
                 <div className="h-full rounded-full transition-all duration-500" style={{ width: `${scores[m.key]}%`, background: m.color }} />
               </div>
@@ -200,7 +200,7 @@ export function EvolutionBar() {
         </div>
 
         {/* Progress dots */}
-        <div className="mt-2.5 flex items-center gap-1.5" style={{ borderColor: "var(--border)" }}>
+        <div className="mt-2.5 flex items-center gap-1 sm:gap-1.5" style={{ borderColor: "var(--border)" }}>
           {EVOLUTION_STAGES.map((s, i) => (
             <button
               key={s.title}

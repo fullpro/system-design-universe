@@ -113,26 +113,36 @@ export function Studio() {
   const analysis = useMemo(() => analyzeDesign(ids, conceptEdges), [ids, conceptEdges]);
 
   return (
-    <div className="absolute inset-x-3 bottom-3 top-[64px] z-10 flex gap-3">
-      <StudioPalette present={present} count={nodes.length} onAdd={addComponent} onClear={clear} onExample={loadExample} />
+    <div className="absolute inset-x-2 bottom-2 top-[56px] z-10 flex flex-col gap-2 sm:inset-x-3 sm:bottom-3 sm:top-[64px] sm:flex-row sm:gap-3">
+      <div className="hidden sm:block">
+        <StudioPalette present={present} count={nodes.length} onAdd={addComponent} onClear={clear} onExample={loadExample} />
+      </div>
 
-      <div className="relative min-w-0 flex-1 overflow-hidden rounded-2xl" style={{ border: "1px solid var(--border)", background: "rgba(255,255,255,0.015)" }}>
+      <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-2xl" style={{ border: "1px solid var(--border)", background: "rgba(255,255,255,0.015)" }}>
         <ReactFlowProvider>
           <StudioCanvas nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} />
         </ReactFlowProvider>
         {nodes.length === 0 && (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-4">
             <div className="text-center">
-              <div className="text-[15px] font-semibold" style={{ color: "var(--text-dim)" }}>Design your own system</div>
-              <div className="mt-1 text-[12.5px]" style={{ color: "var(--text-faint)" }}>
-                Add components from the left · drag to arrange · wire them together · get a live review
+              <div className="text-[14px] font-semibold sm:text-[15px]" style={{ color: "var(--text-dim)" }}>Design your own system</div>
+              <div className="mt-1 text-[11.5px] sm:text-[12.5px]" style={{ color: "var(--text-faint)" }}>
+                <span className="sm:hidden">Tap Example to get started</span>
+                <span className="hidden sm:inline">Add components from the left · drag to arrange · wire them together · get a live review</span>
+              </div>
+              <div className="mt-3 flex justify-center gap-2 sm:hidden">
+                <button onClick={loadExample} className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-[12px] font-semibold" style={{ background: "rgba(99,102,241,0.2)", border: "1px solid rgba(99,102,241,0.45)", color: "#c7d2fe" }}>
+                  Load Example
+                </button>
               </div>
             </div>
           </div>
         )}
       </div>
 
-      <StudioAnalysis analysis={analysis} />
+      <div className="hidden sm:block">
+        <StudioAnalysis analysis={analysis} />
+      </div>
     </div>
   );
 }

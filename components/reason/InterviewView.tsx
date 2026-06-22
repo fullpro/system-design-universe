@@ -55,7 +55,7 @@ export function InterviewView() {
   );
 
   return (
-    <div className="mx-auto grid max-w-[1180px] grid-cols-1 gap-6 px-5 py-6 lg:grid-cols-[330px_1fr]">
+    <div className="mx-auto grid max-w-[1180px] grid-cols-1 gap-4 px-3 py-4 sm:gap-6 sm:px-5 sm:py-6 lg:grid-cols-[330px_1fr]">
       {/* brief + palette */}
       <div className="space-y-4">
         <div className="flex flex-wrap gap-1.5">

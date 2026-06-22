@@ -220,6 +220,17 @@ body {
   outline-offset: 2px;
 }
 
+/* ───────────────────────────── Mobile overrides ───────────────────────────── */
+@media (max-width: 639px) {
+  .react-flow__minimap {
+    display: none;
+  }
+  .react-flow__controls {
+    transform: scale(0.85);
+    transform-origin: bottom right;
+  }
+}
+
 /* Range slider (traffic dial). */
 input[type="range"].dial {
   -webkit-appearance: none;

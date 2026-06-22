@@ -41,18 +41,18 @@ export function JourneyBar() {
       animate={{ y: 0, opacity: 1 }}
       exit={{ y: 40, opacity: 0 }}
       transition={{ type: "spring", stiffness: 300, damping: 32 }}
-      className="glass sheen absolute inset-x-3 bottom-3 z-30 rounded-3xl px-5 py-4"
+      className="glass sheen absolute inset-x-2 bottom-2 z-30 rounded-2xl px-3 py-3 sm:inset-x-3 sm:bottom-3 sm:rounded-3xl sm:px-5 sm:py-4"
     >
-      <div className="flex items-start gap-4">
+      <div className="flex items-start gap-3 sm:gap-4">
         {/* Hop badge */}
         <div className="flex shrink-0 flex-col items-center gap-1.5">
           <span
-            className="flex h-11 w-11 items-center justify-center rounded-2xl"
+            className="flex h-9 w-9 items-center justify-center rounded-xl sm:h-11 sm:w-11 sm:rounded-2xl"
             style={{ background: rgba(accent, 0.16), color: accent, border: `1px solid ${rgba(accent, 0.35)}` }}
           >
-            {concept ? <Icon name={concept.icon} size={22} strokeWidth={1.7} /> : <Gauge size={20} />}
+            {concept ? <Icon name={concept.icon} size={18} strokeWidth={1.7} /> : <Gauge size={16} />}
           </span>
-          <span className="text-[10px] font-semibold tabular-nums" style={{ color: "var(--text-faint)" }}>
+          <span className="text-[9px] font-semibold tabular-nums sm:text-[10px]" style={{ color: "var(--text-faint)" }}>
             {step + 1}/{JOURNEY.length}
           </span>
         </div>
@@ -111,7 +111,7 @@ export function JourneyBar() {
         </div>
 
         {/* Transport controls */}
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
           <button
             onClick={prev}
             disabled={step === 0}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Layers, ChevronDown, X } from "lucide-react";
 import { CATEGORIES, CATEGORY_ORDER } from "@/lib/categories";
@@ -8,9 +8,16 @@ import { CONCEPTS } from "@/lib/concepts";
 import { MAP_NODES } from "@/lib/map";
 import { rgba } from "@/lib/color";
 import { useUniverse } from "@/lib/store";
+import { useIsMobile } from "@/lib/useIsMobile";
 
 export function Legend() {
+  const mobile = useIsMobile();
   const [open, setOpen] = useState(true);
+
+  // Collapse on first mount when on a small screen.
+  useEffect(() => {
+    if (window.matchMedia("(max-width: 639px)").matches) setOpen(false);
+  }, []);
   const layerFilter = useUniverse((s) => s.layerFilter);
   const setLayerFilter = useUniverse((s) => s.setLayerFilter);
 
@@ -22,7 +29,7 @@ export function Legend() {
   }, []);
 
   return (
-    <div className="absolute left-3 top-[72px] z-20 w-[210px]">
+    <div className="absolute left-2 top-[56px] z-20 w-[180px] sm:left-3 sm:top-[72px] sm:w-[210px]">
       <div className="glass sheen overflow-hidden rounded-2xl">
         <button
           onClick={() => setOpen((o) => !o)}

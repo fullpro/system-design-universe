@@ -25,24 +25,24 @@ export function ReasonWorkspace() {
   const setReasonTab = useUniverse((s) => s.setReasonTab);
 
   return (
-    <div className="absolute inset-x-0 bottom-0 top-[64px] z-20 flex flex-col">
+    <div className="absolute inset-x-0 bottom-0 top-[56px] z-20 flex flex-col sm:top-[64px]">
       {/* sub-nav */}
-      <div className="flex justify-center px-3 pt-2">
-        <div className="glass sheen flex flex-wrap items-center gap-1 rounded-2xl p-1">
+      <div className="flex justify-center px-2 pt-2 sm:px-3">
+        <div className="glass sheen flex max-w-full items-center gap-0.5 overflow-x-auto rounded-2xl p-1 sm:gap-1">
           {TABS.map((tab) => {
             const active = reasonTab === tab.id;
             return (
               <button
                 key={tab.id}
                 onClick={() => setReasonTab(tab.id)}
-                className="relative flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[12.5px] font-medium transition-colors"
+                className="relative flex shrink-0 items-center gap-1 rounded-xl px-2 py-1.5 text-[11px] font-medium transition-colors sm:gap-1.5 sm:px-3 sm:text-[12.5px]"
                 style={{ color: active ? "#fff" : "var(--text-dim)" }}
               >
                 {active && (
                   <motion.span layoutId="reasonPill" className="absolute inset-0 rounded-xl" style={{ background: "rgba(99,102,241,0.25)", border: "1px solid rgba(99,102,241,0.45)" }} transition={{ type: "spring", stiffness: 380, damping: 32 }} />
                 )}
                 <span className="relative z-10">{tab.icon}</span>
-                <span className="relative z-10">{tab.label}</span>
+                <span className="relative z-10 hidden sm:inline">{tab.label}</span>
               </button>
             );
           })}

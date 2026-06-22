@@ -60,11 +60,11 @@ export function SimulatorBar() {
       animate={{ y: 0, opacity: 1 }}
       exit={{ y: 40, opacity: 0 }}
       transition={{ type: "spring", stiffness: 300, damping: 32 }}
-      className="glass sheen absolute inset-x-3 bottom-3 z-30 rounded-3xl px-5 py-4"
+      className="glass sheen absolute inset-x-2 bottom-2 z-30 rounded-2xl px-3 py-3 sm:inset-x-3 sm:bottom-3 sm:rounded-3xl sm:px-5 sm:py-4"
     >
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
         {/* Traffic dial */}
-        <div className="lg:w-[320px] lg:shrink-0">
+        <div className="w-full lg:w-[320px] lg:shrink-0">
           <div className="mb-1.5 flex items-end justify-between">
             <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-faint)" }}>
               <Users size={12} /> Traffic

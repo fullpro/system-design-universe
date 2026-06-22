@@ -55,7 +55,7 @@ export function InternalsHeader() {
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
-      className="glass sheen absolute left-3 top-20 z-30 w-[320px] max-w-[calc(100vw-24px)] rounded-2xl p-4"
+      className="glass sheen absolute left-2 top-14 z-30 w-[300px] max-w-[calc(100vw-16px)] rounded-2xl p-3 sm:left-3 sm:top-20 sm:w-[320px] sm:max-w-[calc(100vw-24px)] sm:p-4"
     >
       <button
         onClick={exitInternals}

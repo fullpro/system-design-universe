@@ -89,14 +89,14 @@ export function LearnGallery() {
   const ordered = ["foundation", ...CATEGORY_ORDER.filter((c) => c !== "foundation")] as CategoryId[];
 
   return (
-    <div className="scroll-fade absolute inset-x-0 bottom-0 top-[64px] z-20 overflow-y-auto">
-      <div className="mx-auto max-w-[1140px] px-5 pb-20 pt-4">
+    <div className="scroll-fade absolute inset-x-0 bottom-0 top-[56px] z-20 overflow-y-auto sm:top-[64px]">
+      <div className="mx-auto max-w-[1140px] px-3 pb-20 pt-3 sm:px-5 sm:pt-4">
         <motion.header
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           className="mb-7 mt-2"
         >
-          <h1 className="text-2xl font-bold tracking-tight" style={{ color: "var(--text)" }}>The Atlas</h1>
+          <h1 className="text-xl font-bold tracking-tight sm:text-2xl" style={{ color: "var(--text)" }}>The Atlas</h1>
           <p className="mt-1 text-[13px]" style={{ color: "var(--text-dim)" }}>
             Every concept and cross-cutting principle in one place — {CONCEPTS.length} lessons. Click any card to open it.
           </p>

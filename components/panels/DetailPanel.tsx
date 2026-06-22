@@ -62,7 +62,7 @@ export function DetailPanel() {
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: 460, opacity: 0 }}
           transition={{ type: "spring", stiffness: 320, damping: 34 }}
-          className="scroll-fade glass absolute right-3 top-20 bottom-3 z-30 w-[420px] max-w-[calc(100vw-24px)] overflow-y-auto rounded-3xl"
+          className="scroll-fade glass absolute z-30 overflow-y-auto rounded-2xl sm:rounded-3xl inset-x-2 bottom-2 top-14 sm:inset-x-auto sm:right-3 sm:top-20 sm:bottom-3 sm:w-[420px]"
           style={{ boxShadow: "0 30px 80px -20px rgba(0,0,0,0.8)" }}
         >
           {(() => {
@@ -70,7 +70,7 @@ export function DetailPanel() {
             return (
               <>
                 {/* Header */}
-                <div className="sticky top-0 z-10 px-5 pb-4 pt-5" style={{ background: "linear-gradient(180deg, var(--panel-solid) 70%, transparent)", backdropFilter: "blur(8px)" }}>
+                <div className="sticky top-0 z-10 px-4 pb-3 pt-4 sm:px-5 sm:pb-4 sm:pt-5" style={{ background: "linear-gradient(180deg, var(--panel-solid) 70%, transparent)", backdropFilter: "blur(8px)" }}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <span
