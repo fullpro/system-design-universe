@@ -237,6 +237,11 @@ body {
   }
 }
 
+/* Safe-area bottom padding for phones with gesture bars */
+.safe-bottom {
+  padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
+}
+
 /* Range slider (traffic dial). */
 input[type="range"].dial {
   -webkit-appearance: none;

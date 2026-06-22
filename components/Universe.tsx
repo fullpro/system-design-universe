@@ -25,11 +25,11 @@ function BottomCTA() {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 12 }}
       transition={{ delay: 0.3 }}
-      className="absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-2 pb-[max(12px,env(safe-area-inset-bottom))] sm:pb-4"
+      className="safe-bottom pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-1.5"
     >
       <motion.button
         onClick={startJourney}
-        className="glass sheen flex items-center gap-2 whitespace-nowrap rounded-full px-4 py-2 text-[12px] font-semibold transition-all hover:brightness-110 sm:px-5 sm:py-2.5 sm:text-[13px]"
+        className="pointer-events-auto glass sheen flex items-center gap-2 whitespace-nowrap rounded-full px-4 py-2 text-[12px] font-semibold transition-all hover:brightness-110 sm:px-5 sm:py-2.5 sm:text-[13px]"
         style={{ background: "rgba(99,102,241,0.25)", border: "1px solid rgba(99,102,241,0.5)", color: "#c7d2fe" }}
       >
         <Send size={15} className="shrink-0" />
@@ -39,8 +39,8 @@ function BottomCTA() {
           GET /products
         </span>
       </motion.button>
-      <div className="flex items-center gap-2 text-[11px] sm:text-[12px]" style={{ color: "var(--text-dim)" }}>
-        <MousePointerClick size={13} className="shrink-0" style={{ color: "#a5b4fc" }} />
+      <div className="flex items-center gap-1.5 text-[10px] sm:text-[12px]" style={{ color: "var(--text-dim)" }}>
+        <MousePointerClick size={12} className="shrink-0" style={{ color: "#a5b4fc" }} />
         <span className="sm:hidden">Tap a node · pinch to zoom</span>
         <span className="hidden sm:inline">Click any node to dive in · scroll to zoom · drag to pan</span>
       </div>

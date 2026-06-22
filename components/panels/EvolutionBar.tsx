@@ -118,7 +118,7 @@ export function EvolutionBar() {
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 40, opacity: 0 }}
         transition={{ type: "spring", stiffness: 300, damping: 32 }}
-        className="glass sheen absolute inset-x-2 bottom-2 z-30 rounded-2xl px-3 py-3 sm:inset-x-3 sm:bottom-3 sm:rounded-3xl sm:px-5 sm:py-4"
+        className="glass sheen safe-bottom absolute inset-x-2 bottom-0 z-30 rounded-t-2xl px-3 py-3 sm:inset-x-3 sm:bottom-3 sm:rounded-3xl sm:px-5 sm:py-4"
       >
         <div className="flex items-center gap-3 sm:gap-4">
           {/* Stage index */}
