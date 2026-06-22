@@ -67,7 +67,7 @@ export function Universe() {
   };
 
   return (
-    <main className="relative h-screen w-screen overflow-hidden">
+    <main className="relative w-screen overflow-hidden" style={{ height: "100dvh" }}>
       <div className="universe-bg" />
 
       {mode !== "learn" && mode !== "reason" && mode !== "studio" && (
