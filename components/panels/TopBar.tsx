@@ -28,26 +28,88 @@ export function TopBar() {
   const mode = useUniverse((s) => s.mode);
   const setMode = useUniverse((s) => s.setMode);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
 
   const active: ViewMode = mode === "internals" ? "map" : mode;
 
   return (
     <header className="absolute inset-x-2 top-2 z-40 flex items-center gap-1.5 sm:inset-x-3 sm:top-3 sm:justify-between sm:gap-2">
-      {/* Brand — icon-only on mobile */}
-      <div className="glass sheen flex shrink-0 items-center gap-2 rounded-2xl px-2.5 py-2 sm:gap-2.5 sm:px-3.5">
+      {/* Brand — icon-only on mobile, clickable to show about */}
+      <button
+        onClick={() => setAboutOpen((o) => !o)}
+        className="glass sheen flex shrink-0 items-center gap-2 rounded-2xl px-2.5 py-2 transition-all hover:brightness-110 sm:gap-2.5 sm:px-3.5"
+      >
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg sm:h-8 sm:w-8 sm:rounded-xl" style={{ background: "rgba(99,102,241,0.18)", color: "#a5b4fc", border: "1px solid rgba(99,102,241,0.35)" }}>
           <Orbit size={16} strokeWidth={1.8} className="sm:hidden" />
           <Orbit size={18} strokeWidth={1.8} className="hidden sm:block" />
         </span>
         <div className="hidden leading-tight sm:block">
-          <div className="whitespace-nowrap text-[14px] font-bold tracking-tight" style={{ color: "var(--text)" }}>
+          <div className="whitespace-nowrap text-[14px] font-bold tracking-tight text-left" style={{ color: "var(--text)" }}>
             System Design Universe
           </div>
-          <div className="hidden whitespace-nowrap text-[10px] xl:block" style={{ color: "var(--text-faint)" }}>
+          <div className="hidden whitespace-nowrap text-[10px] text-left xl:block" style={{ color: "var(--text-faint)" }}>
             Explore how every concept fits together
           </div>
         </div>
-      </div>
+      </button>
+
+      {/* About popup */}
+      <AnimatePresence>
+        {aboutOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setAboutOpen(false)}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: "rgba(4,5,9,0.72)", backdropFilter: "blur(6px)" }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 12 }}
+              transition={{ type: "spring", stiffness: 320, damping: 30 }}
+              onClick={(e) => e.stopPropagation()}
+              className="glass sheen w-full max-w-[420px] rounded-2xl p-5 sm:rounded-3xl sm:p-6"
+              style={{ boxShadow: "0 40px 100px -30px rgba(0,0,0,0.9)" }}
+            >
+              <div className="flex items-center gap-3">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl" style={{ background: "rgba(99,102,241,0.18)", color: "#a5b4fc", border: "1px solid rgba(99,102,241,0.35)" }}>
+                  <Orbit size={22} strokeWidth={1.7} />
+                </span>
+                <div>
+                  <h2 className="text-[17px] font-bold tracking-tight" style={{ color: "var(--text)" }}>System Design Universe</h2>
+                  <p className="text-[11px]" style={{ color: "var(--text-faint)" }}>Interactive distributed systems learning</p>
+                </div>
+              </div>
+
+              <p className="mt-4 text-[13px] leading-relaxed" style={{ color: "var(--text-dim)" }}>
+                An interactive map for building a complete mental model of modern distributed systems. Explore how DNS, CDNs, load balancers, caches, queues, databases and more fit together — from the first request to the final response.
+              </p>
+
+              <div className="mt-4 space-y-2">
+                {HELP.map((h) => (
+                  <div key={h.k} className="flex items-start gap-2">
+                    <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: "#a5b4fc" }} />
+                    <div>
+                      <span className="text-[12px] font-semibold" style={{ color: "#a5b4fc" }}>{h.k}</span>
+                      <span className="text-[12px]" style={{ color: "var(--text-dim)" }}> — {h.v}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                onClick={() => setAboutOpen(false)}
+                className="mt-5 flex w-full items-center justify-center rounded-xl py-2.5 text-[13px] font-semibold transition-all hover:brightness-110"
+                style={{ background: "rgba(99,102,241,0.2)", border: "1px solid rgba(99,102,241,0.45)", color: "#c7d2fe" }}
+              >
+                Got it
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Mode switcher */}
       <div className="glass sheen flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto rounded-2xl p-1 sm:flex-initial sm:gap-1">
