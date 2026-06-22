@@ -30,7 +30,7 @@ export function StudioPalette({ present, count, onAdd, onClear, onExample }: Pro
   }, []);
 
   return (
-    <div className="glass sheen flex h-full w-[244px] shrink-0 flex-col rounded-2xl">
+    <div className="flex w-full shrink-0 flex-col sm:glass sm:sheen sm:h-full sm:w-[244px] sm:rounded-2xl">
       <div className="flex items-center justify-between px-3.5 pb-2.5 pt-3">
         <span className="text-[12px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>Components</span>
         <span className="rounded-md px-1.5 py-0.5 text-[10px] font-semibold tabular-nums" style={{ background: "rgba(255,255,255,0.06)", color: "var(--text-faint)" }}>{count}</span>

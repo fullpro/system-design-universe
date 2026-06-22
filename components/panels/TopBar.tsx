@@ -6,13 +6,13 @@ import { Compass, Gauge, GitBranch, Blocks, GraduationCap, BrainCircuit, Orbit, 
 import { useUniverse } from "@/lib/store";
 import type { ViewMode } from "@/lib/types";
 
-const TABS: { id: ViewMode; label: string; icon: React.ReactNode }[] = [
-  { id: "map", label: "Explore", icon: <Compass size={15} /> },
-  { id: "simulator", label: "Simulate", icon: <Gauge size={15} /> },
-  { id: "evolution", label: "Evolve", icon: <GitBranch size={15} /> },
-  { id: "studio", label: "Build", icon: <Blocks size={15} /> },
-  { id: "learn", label: "Learn", icon: <GraduationCap size={15} /> },
-  { id: "reason", label: "Reason", icon: <BrainCircuit size={15} /> },
+const TABS: { id: ViewMode; label: string; short: string; icon: React.ReactNode }[] = [
+  { id: "map", label: "Explore", short: "Map", icon: <Compass size={15} /> },
+  { id: "simulator", label: "Simulate", short: "Sim", icon: <Gauge size={15} /> },
+  { id: "evolution", label: "Evolve", short: "Evo", icon: <GitBranch size={15} /> },
+  { id: "studio", label: "Build", short: "Build", icon: <Blocks size={15} /> },
+  { id: "learn", label: "Learn", short: "Learn", icon: <GraduationCap size={15} /> },
+  { id: "reason", label: "Reason", short: "Think", icon: <BrainCircuit size={15} /> },
 ];
 
 const HELP = [
@@ -70,7 +70,10 @@ export function TopBar() {
                 />
               )}
               <span className="relative z-10">{tab.icon}</span>
-              <span className="relative z-10 hidden sm:inline">{tab.label}</span>
+              <span className="relative z-10 text-[10px] sm:text-[13px]">
+                <span className="sm:hidden">{tab.short}</span>
+                <span className="hidden sm:inline">{tab.label}</span>
+              </span>
             </button>
           );
         })}

@@ -11,13 +11,13 @@ import { FailureView } from "./FailureView";
 import { ComparisonView } from "./ComparisonView";
 import { InterviewView } from "./InterviewView";
 
-const TABS: { id: ReasonTab; label: string; icon: React.ReactNode; blurb: string }[] = [
-  { id: "advisor", label: "Architecture Advisor", icon: <Sparkles size={14} />, blurb: "Constraints → architecture" },
-  { id: "diagnose", label: "Bottleneck Diagnosis", icon: <Stethoscope size={14} />, blurb: "Symptoms → root cause" },
-  { id: "tradeoff", label: "Tradeoff Lab", icon: <SlidersHorizontal size={14} />, blurb: "Priorities → archetype" },
-  { id: "failure", label: "Failure Simulator", icon: <Bomb size={14} />, blurb: "Break it → watch it cascade" },
-  { id: "compare", label: "Comparison", icon: <GitCompare size={14} />, blurb: "Two options, side by side" },
-  { id: "interview", label: "Interview Challenge", icon: <ClipboardList size={14} />, blurb: "Build it → get graded" },
+const TABS: { id: ReasonTab; label: string; short: string; icon: React.ReactNode; blurb: string }[] = [
+  { id: "advisor", label: "Architecture Advisor", short: "Advisor", icon: <Sparkles size={14} />, blurb: "Constraints → architecture" },
+  { id: "diagnose", label: "Bottleneck Diagnosis", short: "Diagnose", icon: <Stethoscope size={14} />, blurb: "Symptoms → root cause" },
+  { id: "tradeoff", label: "Tradeoff Lab", short: "Tradeoff", icon: <SlidersHorizontal size={14} />, blurb: "Priorities → archetype" },
+  { id: "failure", label: "Failure Simulator", short: "Failure", icon: <Bomb size={14} />, blurb: "Break it → watch it cascade" },
+  { id: "compare", label: "Comparison", short: "Compare", icon: <GitCompare size={14} />, blurb: "Two options, side by side" },
+  { id: "interview", label: "Interview Challenge", short: "Interview", icon: <ClipboardList size={14} />, blurb: "Build it → get graded" },
 ];
 
 export function ReasonWorkspace() {
@@ -42,7 +42,10 @@ export function ReasonWorkspace() {
                   <motion.span layoutId="reasonPill" className="absolute inset-0 rounded-xl" style={{ background: "rgba(99,102,241,0.25)", border: "1px solid rgba(99,102,241,0.45)" }} transition={{ type: "spring", stiffness: 380, damping: 32 }} />
                 )}
                 <span className="relative z-10">{tab.icon}</span>
-                <span className="relative z-10 hidden sm:inline">{tab.label}</span>
+                <span className="relative z-10 text-[10px] sm:text-[12.5px]">
+                  <span className="sm:hidden">{tab.short}</span>
+                  <span className="hidden sm:inline">{tab.label}</span>
+                </span>
               </button>
             );
           })}

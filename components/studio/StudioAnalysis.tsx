@@ -19,7 +19,7 @@ export function StudioAnalysis({ analysis }: { analysis: DesignAnalysis }) {
   const gradeColor = GRADE_COLOR[grade] ?? "#818cf8";
 
   return (
-    <div className="glass sheen flex h-full w-[330px] shrink-0 flex-col rounded-2xl">
+    <div className="flex w-full shrink-0 flex-col sm:glass sm:sheen sm:h-full sm:w-[330px] sm:rounded-2xl">
       <div className="scroll-fade min-h-0 flex-1 overflow-y-auto p-4">
         <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>Live review</div>
 

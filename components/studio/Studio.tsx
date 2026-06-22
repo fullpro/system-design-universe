@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   ReactFlowProvider,
   applyNodeChanges,
@@ -12,6 +12,8 @@ import {
   type NodeChange,
   type EdgeChange,
 } from "@xyflow/react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Package, X, BarChart3 } from "lucide-react";
 import { useUniverse } from "@/lib/store";
 import { getConcept } from "@/lib/concepts";
 import { CATEGORIES } from "@/lib/categories";
@@ -112,8 +114,11 @@ export function Studio() {
   );
   const analysis = useMemo(() => analyzeDesign(ids, conceptEdges), [ids, conceptEdges]);
 
+  const [mobilePanel, setMobilePanel] = useState<"palette" | "analysis" | null>(null);
+
   return (
     <div className="absolute inset-x-2 bottom-2 top-[56px] z-10 flex flex-col gap-2 sm:inset-x-3 sm:bottom-3 sm:top-[64px] sm:flex-row sm:gap-3">
+      {/* Desktop palette */}
       <div className="hidden sm:block">
         <StudioPalette present={present} count={nodes.length} onAdd={addComponent} onClear={clear} onExample={loadExample} />
       </div>
@@ -123,26 +128,72 @@ export function Studio() {
           <StudioCanvas nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} />
         </ReactFlowProvider>
         {nodes.length === 0 && (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-4">
-            <div className="text-center">
+          <div className="absolute inset-0 flex items-center justify-center px-4">
+            <div className="pointer-events-none text-center">
               <div className="text-[14px] font-semibold sm:text-[15px]" style={{ color: "var(--text-dim)" }}>Design your own system</div>
               <div className="mt-1 text-[11.5px] sm:text-[12.5px]" style={{ color: "var(--text-faint)" }}>
-                <span className="sm:hidden">Tap Example to get started</span>
+                <span className="sm:hidden">Add components or load an example below</span>
                 <span className="hidden sm:inline">Add components from the left · drag to arrange · wire them together · get a live review</span>
-              </div>
-              <div className="mt-3 flex justify-center gap-2 sm:hidden">
-                <button onClick={loadExample} className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-[12px] font-semibold" style={{ background: "rgba(99,102,241,0.2)", border: "1px solid rgba(99,102,241,0.45)", color: "#c7d2fe" }}>
-                  Load Example
-                </button>
               </div>
             </div>
           </div>
         )}
+
+        {/* Mobile floating toolbar */}
+        <div className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 gap-2 sm:hidden">
+          <button
+            onClick={() => setMobilePanel(mobilePanel === "palette" ? null : "palette")}
+            className="glass sheen flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[12px] font-semibold"
+            style={{ color: mobilePanel === "palette" ? "#c7d2fe" : "var(--text-dim)", background: mobilePanel === "palette" ? "rgba(99,102,241,0.3)" : undefined }}
+          >
+            <Package size={14} /> Components
+          </button>
+          {nodes.length > 0 && (
+            <button
+              onClick={() => setMobilePanel(mobilePanel === "analysis" ? null : "analysis")}
+              className="glass sheen flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[12px] font-semibold"
+              style={{ color: mobilePanel === "analysis" ? "#c7d2fe" : "var(--text-dim)", background: mobilePanel === "analysis" ? "rgba(99,102,241,0.3)" : undefined }}
+            >
+              <BarChart3 size={14} /> Review
+            </button>
+          )}
+        </div>
       </div>
 
+      {/* Desktop analysis */}
       <div className="hidden sm:block">
         <StudioAnalysis analysis={analysis} />
       </div>
+
+      {/* Mobile bottom sheet for palette / analysis */}
+      <AnimatePresence>
+        {mobilePanel && (
+          <motion.div
+            key={mobilePanel}
+            initial={{ y: "100%" }}
+            animate={{ y: 0 }}
+            exit={{ y: "100%" }}
+            transition={{ type: "spring", stiffness: 300, damping: 32 }}
+            className="glass sheen absolute inset-x-2 bottom-2 z-30 max-h-[55vh] overflow-hidden rounded-2xl sm:hidden"
+          >
+            <div className="flex items-center justify-between px-3.5 pb-1 pt-3">
+              <span className="text-[12px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>
+                {mobilePanel === "palette" ? "Components" : "Live Review"}
+              </span>
+              <button onClick={() => setMobilePanel(null)} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-white/10" style={{ color: "var(--text-faint)" }}>
+                <X size={15} />
+              </button>
+            </div>
+            <div className="scroll-fade max-h-[calc(55vh-44px)] overflow-y-auto">
+              {mobilePanel === "palette" ? (
+                <StudioPalette present={present} count={nodes.length} onAdd={(id) => { addComponent(id); }} onClear={clear} onExample={() => { loadExample(); setMobilePanel(null); }} />
+              ) : (
+                <StudioAnalysis analysis={analysis} />
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
