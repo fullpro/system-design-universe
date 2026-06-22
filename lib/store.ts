@@ -1,0 +1,269 @@
+import { create } from "zustand";
+import type { Node as RFNode, Edge as RFEdge } from "@xyflow/react";
+import type { ViewMode, ReasonTab, CategoryId } from "./types";
+import { SIM_TIERS } from "./simulator";
+import { EVOLUTION_STAGES } from "./evolution";
+import { JOURNEY } from "./journey";
+import { type Requirements, DEFAULT_REQUIREMENTS } from "./reasoning/requirements";
+import { type PriorityVector, type PriorityId, BALANCED_PRIORITIES } from "./reasoning/tradeoff";
+import { SCENARIOS } from "./reasoning/scenarios";
+
+interface UniverseState {
+  /** Active canvas mode. */
+  mode: ViewMode;
+  /** The mode before entering internals; used to restore on back. */
+  priorMode: ViewMode;
+  /** Concept whose detail panel is open (null = closed). */
+  selectedConceptId: string | null;
+  /** Concept whose internals are being explored in "internals" mode. */
+  zoomedConceptId: string | null;
+  /** World-Map layer focus; non-matching nodes recede. null = show all. */
+  layerFilter: CategoryId | null;
+
+  // Internals playback / failure inspection
+  internalsStep: number | null;
+  internalsPlaying: boolean;
+  internalsFailure: string | null;
+
+  // Design Studio (freeform builder) — persisted so the design survives tab switches.
+  studioNodes: RFNode[];
+  studioEdges: RFEdge[];
+
+  // Simulator
+  trafficTier: number;
+  enabledSolutions: string[];
+
+  // Evolution
+  evolutionStage: number;
+  /** Stage whose problem-gate question is currently posed (null = none). */
+  evoChallenge: number | null;
+  /** Stages whose gate has already been answered. */
+  evoSolved: number[];
+
+  // Request Journey (Explore mode) — index of the active hop, or null when idle.
+  journeyStep: number | null;
+  journeyPlaying: boolean;
+
+  // Reasoning Engine
+  reasonTab: ReasonTab;
+  requirements: Requirements;
+  priorities: PriorityVector;
+  scenarioIndex: number;
+  diagSelected: string | null;
+  diagRevealed: boolean;
+
+  // Actions
+  setMode: (mode: ViewMode) => void;
+  selectConcept: (id: string) => void;
+  closeDetail: () => void;
+  zoomInto: (id: string) => void;
+  exitInternals: () => void;
+  setLayerFilter: (cat: CategoryId | null) => void;
+
+  setInternalsStep: (i: number | null) => void;
+  internalsNext: (total: number) => void;
+  internalsPrev: () => void;
+  toggleInternalsPlay: (total: number) => void;
+  setInternalsFailure: (id: string | null) => void;
+
+  setStudioNodes: (u: RFNode[] | ((p: RFNode[]) => RFNode[])) => void;
+  setStudioEdges: (u: RFEdge[] | ((p: RFEdge[]) => RFEdge[])) => void;
+  clearStudio: () => void;
+
+  setTrafficTier: (tier: number) => void;
+  toggleSolution: (id: string) => void;
+  resetSimulator: () => void;
+
+  setEvolutionStage: (stage: number) => void;
+  nextEvolution: () => void;
+  prevEvolution: () => void;
+  answerEvolution: () => void;
+  dismissEvolutionChallenge: () => void;
+
+  startJourney: () => void;
+  endJourney: () => void;
+  journeyNext: () => void;
+  journeyPrev: () => void;
+  setJourneyStep: (i: number) => void;
+  toggleJourneyPlay: () => void;
+
+  setReasonTab: (tab: ReasonTab) => void;
+  setRequirements: (patch: Partial<Requirements>) => void;
+  applyRequirements: (values: Requirements) => void;
+  setPriority: (id: PriorityId, value: number) => void;
+  applyPriorities: (values: PriorityVector) => void;
+  answerScenario: (optionId: string) => void;
+  gotoScenario: (index: number) => void;
+}
+
+const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+
+export const useUniverse = create<UniverseState>((set) => ({
+  mode: "map",
+  priorMode: "map",
+  selectedConceptId: null,
+  zoomedConceptId: null,
+  layerFilter: null,
+  internalsStep: null,
+  internalsPlaying: false,
+  internalsFailure: null,
+  studioNodes: [],
+  studioEdges: [],
+  trafficTier: 0,
+  enabledSolutions: [],
+  evolutionStage: 0,
+  evoChallenge: null,
+  evoSolved: [],
+  journeyStep: null,
+  journeyPlaying: false,
+
+  reasonTab: "advisor",
+  requirements: DEFAULT_REQUIREMENTS,
+  priorities: BALANCED_PRIORITIES,
+  scenarioIndex: 0,
+  diagSelected: null,
+  diagRevealed: false,
+
+  setMode: (mode) =>
+    set((s) => ({
+      mode,
+      priorMode: mode === "internals" ? s.priorMode : mode,
+      // Leaving internals clears the zoom target; opening a fresh mode closes the panel.
+      zoomedConceptId: mode === "internals" ? s.zoomedConceptId : null,
+      selectedConceptId: mode === s.mode ? s.selectedConceptId : null,
+      // A request journey only lives on the World Map.
+      journeyStep: mode === "map" ? s.journeyStep : null,
+      journeyPlaying: mode === "map" ? s.journeyPlaying : false,
+    })),
+
+  selectConcept: (id) => set({ selectedConceptId: id }),
+  closeDetail: () => set({ selectedConceptId: null }),
+
+  zoomInto: (id) =>
+    set((s) => ({
+      priorMode: s.mode,
+      mode: "internals",
+      zoomedConceptId: id,
+      selectedConceptId: id,
+      internalsStep: null,
+      internalsPlaying: false,
+      internalsFailure: null,
+    })),
+
+  exitInternals: () =>
+    set((s) => ({
+      mode: s.priorMode,
+      zoomedConceptId: null,
+      selectedConceptId: null,
+      internalsStep: null,
+      internalsPlaying: false,
+      internalsFailure: null,
+    })),
+
+  setLayerFilter: (cat) =>
+    set((s) => ({ layerFilter: s.layerFilter === cat ? null : cat })),
+
+  setInternalsStep: (i) => set({ internalsStep: i, internalsPlaying: false, internalsFailure: null }),
+  internalsNext: (total) =>
+    set((s) => {
+      if (s.internalsStep === null) return { internalsStep: 0, internalsFailure: null };
+      if (s.internalsStep >= total - 1) return { internalsPlaying: false };
+      return { internalsStep: s.internalsStep + 1, internalsFailure: null };
+    }),
+  internalsPrev: () =>
+    set((s) =>
+      s.internalsStep === null
+        ? s
+        : { internalsStep: Math.max(0, s.internalsStep - 1), internalsPlaying: false, internalsFailure: null },
+    ),
+  toggleInternalsPlay: (total) =>
+    set((s) => {
+      if (s.internalsStep === null || (!s.internalsPlaying && s.internalsStep >= total - 1))
+        return { internalsStep: 0, internalsPlaying: true, internalsFailure: null };
+      return { internalsPlaying: !s.internalsPlaying };
+    }),
+  setInternalsFailure: (id) =>
+    set((s) => ({ internalsFailure: s.internalsFailure === id ? null : id, internalsPlaying: false })),
+
+  setStudioNodes: (u) =>
+    set((s) => ({ studioNodes: typeof u === "function" ? u(s.studioNodes) : u })),
+  setStudioEdges: (u) =>
+    set((s) => ({ studioEdges: typeof u === "function" ? u(s.studioEdges) : u })),
+  clearStudio: () => set({ studioNodes: [], studioEdges: [] }),
+
+  setTrafficTier: (tier) => set({ trafficTier: clamp(tier, 0, SIM_TIERS.length - 1) }),
+  toggleSolution: (id) =>
+    set((s) => ({
+      enabledSolutions: s.enabledSolutions.includes(id)
+        ? s.enabledSolutions.filter((x) => x !== id)
+        : [...s.enabledSolutions, id],
+    })),
+  resetSimulator: () => set({ trafficTier: 0, enabledSolutions: [] }),
+
+  setEvolutionStage: (stage) =>
+    set({ evolutionStage: clamp(stage, 0, EVOLUTION_STAGES.length - 1), evoChallenge: null }),
+  nextEvolution: () =>
+    set((s) => {
+      const target = clamp(s.evolutionStage + 1, 0, EVOLUTION_STAGES.length - 1);
+      if (target === s.evolutionStage) return s;
+      // Gate the reveal behind the stage's problem-first question (once).
+      if (EVOLUTION_STAGES[target].question && !s.evoSolved.includes(target)) {
+        return { evoChallenge: target };
+      }
+      return { evolutionStage: target };
+    }),
+  prevEvolution: () =>
+    set((s) => ({ evolutionStage: clamp(s.evolutionStage - 1, 0, EVOLUTION_STAGES.length - 1), evoChallenge: null })),
+  answerEvolution: () =>
+    set((s) =>
+      s.evoChallenge === null
+        ? s
+        : {
+            evolutionStage: s.evoChallenge,
+            evoSolved: [...new Set([...s.evoSolved, s.evoChallenge])],
+            evoChallenge: null,
+          },
+    ),
+  dismissEvolutionChallenge: () => set({ evoChallenge: null }),
+
+  // ── Request Journey ──────────────────────────────────────────────
+  startJourney: () => set({ journeyStep: 0, journeyPlaying: true, selectedConceptId: null, layerFilter: null }),
+  endJourney: () => set({ journeyStep: null, journeyPlaying: false }),
+  journeyNext: () =>
+    set((s) => {
+      if (s.journeyStep === null) return s;
+      if (s.journeyStep >= JOURNEY.length - 1) return { journeyPlaying: false };
+      return { journeyStep: s.journeyStep + 1 };
+    }),
+  journeyPrev: () =>
+    set((s) =>
+      s.journeyStep === null
+        ? s
+        : { journeyStep: Math.max(0, s.journeyStep - 1), journeyPlaying: false },
+    ),
+  setJourneyStep: (i) =>
+    set({ journeyStep: clamp(i, 0, JOURNEY.length - 1), journeyPlaying: false }),
+  toggleJourneyPlay: () =>
+    set((s) => {
+      if (s.journeyStep === null) return { journeyStep: 0, journeyPlaying: true };
+      // Replay from the start if paused on the final hop.
+      if (!s.journeyPlaying && s.journeyStep >= JOURNEY.length - 1)
+        return { journeyStep: 0, journeyPlaying: true };
+      return { journeyPlaying: !s.journeyPlaying };
+    }),
+
+  setReasonTab: (tab) => set({ reasonTab: tab, selectedConceptId: null }),
+  setRequirements: (patch) => set((s) => ({ requirements: { ...s.requirements, ...patch } })),
+  applyRequirements: (values) => set({ requirements: values }),
+  setPriority: (id, value) =>
+    set((s) => ({ priorities: { ...s.priorities, [id]: clamp(value, 0, 100) } })),
+  applyPriorities: (values) => set({ priorities: values }),
+  answerScenario: (optionId) =>
+    set((s) => (s.diagRevealed ? s : { diagSelected: optionId, diagRevealed: true })),
+  gotoScenario: (index) =>
+    set({
+      scenarioIndex: clamp(index, 0, SCENARIOS.length - 1),
+      diagSelected: null,
+      diagRevealed: false,
+    }),
+}));

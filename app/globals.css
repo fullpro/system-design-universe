@@ -1,0 +1,241 @@
+@import "tailwindcss";
+@import "@xyflow/react/dist/style.css";
+
+/* ───────────────────────────── Design tokens ───────────────────────────── */
+:root {
+  --bg: #06070c;
+  --bg-2: #0a0c14;
+  --panel: rgba(17, 20, 31, 0.72);
+  --panel-solid: #0d0f17;
+  --panel-hover: rgba(28, 32, 48, 0.85);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --text: #e8eaf2;
+  --text-dim: #99a1b7;
+  --text-faint: #5a6379;
+  --brand: #6366f1;
+  --good: #34d399;
+  --warn: #fbbf24;
+  --bad: #f87171;
+  --crit: #ef4444;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, "Apple Color Emoji", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+}
+
+/* Ambient gradient backdrop for the whole app. */
+.universe-bg {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(1200px 700px at 75% -10%, rgba(99, 102, 241, 0.14), transparent 60%),
+    radial-gradient(1000px 600px at 10% 110%, rgba(34, 211, 238, 0.1), transparent 55%),
+    radial-gradient(900px 600px at 90% 100%, rgba(244, 114, 182, 0.08), transparent 55%),
+    linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
+  z-index: 0;
+}
+
+/* ───────────────────────────── Scrollbars ───────────────────────────── */
+.scroll-fade::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scroll-fade::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+}
+.scroll-fade::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ───────────────────────────── React Flow theming ───────────────────────────── */
+.react-flow {
+  background: transparent;
+}
+.react-flow__attribution {
+  display: none;
+}
+.react-flow__handle {
+  opacity: 0;
+  pointer-events: none;
+  min-width: 1px;
+  min-height: 1px;
+  width: 1px;
+  height: 1px;
+  border: none;
+}
+.react-flow__edge-path {
+  stroke-linecap: round;
+}
+.react-flow__controls {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+  background: var(--panel-solid);
+}
+.react-flow__controls-button {
+  background: var(--panel-solid);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-dim);
+  width: 30px;
+  height: 30px;
+}
+.react-flow__controls-button:hover {
+  background: var(--panel-hover);
+  color: var(--text);
+}
+.react-flow__controls-button svg {
+  fill: currentColor;
+}
+.react-flow__minimap {
+  background: var(--panel-solid);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+/* ───────────────────────────── Animated flow ───────────────────────────── */
+@keyframes dashdraw {
+  to {
+    stroke-dashoffset: -16;
+  }
+}
+.flow-dash {
+  stroke-dasharray: 6 8;
+  animation: dashdraw 0.7s linear infinite;
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.7;
+  }
+  70% {
+    transform: scale(1.25);
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.pulse-ring {
+  animation: pulse-ring 1.6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+@keyframes float-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Glassmorphism helper. */
+.glass {
+  background: var(--panel);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid var(--border);
+}
+
+/* Subtle inner sheen on cards. */
+.sheen {
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.06),
+    0 10px 40px -12px rgba(0, 0, 0, 0.7);
+}
+
+/* ───────────────────────────── Node visual system ───────────────────────────── */
+
+/* Concept node base + hover glow via CSS custom property */
+.concept-node {
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.06),
+    0 10px 40px -12px rgba(0, 0, 0, 0.7);
+}
+.concept-node:hover {
+  box-shadow:
+    0 0 24px -4px var(--node-glow),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.08),
+    0 14px 44px -12px rgba(0, 0, 0, 0.7);
+}
+
+/* Micro-diagram ambient breathing */
+.micro-diagram svg {
+  animation: diagram-breathe 4s ease-in-out infinite;
+}
+@keyframes diagram-breathe {
+  0%, 100% { opacity: 0.82; }
+  50% { opacity: 1; }
+}
+
+/* Sim node base */
+.sim-node {
+  transition: box-shadow 0.3s, border-color 0.3s;
+}
+
+/* Backlog dots piling up at an overloaded tier */
+@keyframes queuePulse {
+  0%, 100% { transform: translateY(0); opacity: 0.45; }
+  50% { transform: translateY(-2px); opacity: 1; }
+}
+
+/* ── Design Studio: make connection handles visible & grabbable ── */
+.studio-flow .react-flow__handle {
+  opacity: 0;
+  width: 9px;
+  height: 9px;
+  min-width: 9px;
+  min-height: 9px;
+  background: var(--brand);
+  border: 1.5px solid rgba(255, 255, 255, 0.55);
+  pointer-events: all;
+  transition: opacity 0.15s ease;
+}
+.studio-flow .react-flow__node:hover .react-flow__handle,
+.studio-flow .react-flow__handle.connectionindicator,
+.studio-flow.react-flow__pane--dragging .react-flow__handle {
+  opacity: 0.9;
+}
+.studio-flow .react-flow__node.selected .concept-node {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* Range slider (traffic dial). */
+input[type="range"].dial {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  outline: none;
+}
+input[type="range"].dial::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  cursor: pointer;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.35), 0 2px 8px rgba(0, 0, 0, 0.5);
+}
