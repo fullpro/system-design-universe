@@ -109,9 +109,13 @@ export function Studio() {
   const onNodesChange = useCallback(
     (c: NodeChange[]) => {
       // Track selected node so we can show a delete button.
+      // On mobile, auto-open the Components panel so the delete button is visible.
       for (const change of c) {
         if (change.type === "select") {
           setSelectedNodeId(change.selected ? change.id : null);
+          if (change.selected && window.matchMedia("(max-width: 1023px)").matches) {
+            setMobilePanel("palette");
+          }
         }
       }
       setNodes((ns) => applyNodeChanges(c, ns));
