@@ -148,6 +148,11 @@ export function EvolutionBar() {
                 <p className="mt-1 line-clamp-2 text-[11px] leading-snug sm:text-[12px]" style={{ color: "var(--text-dim)" }}>
                   {data.narrative}
                 </p>
+                {data.complexity && (
+                  <p className="mt-1 line-clamp-2 text-[10.5px] leading-snug sm:text-[11px]" style={{ color: "var(--text-faint)" }}>
+                    <span style={{ color: "#fbbf24" }}>New complexity: </span>{data.complexity}
+                  </p>
+                )}
               </motion.div>
             </AnimatePresence>
           </div>

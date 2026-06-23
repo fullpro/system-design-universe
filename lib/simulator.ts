@@ -23,31 +23,31 @@ export const SIM_TIERS: TrafficTierDef[] = [
     users: "100",
     rps: "~5 req/s",
     demand: 0.15,
-    narrative: "A single server with a database. Everything is fast. Don't add anything yet — premature scaling is its own bug.",
+    narrative: "A single server with a database. Everything is fast — p99 under 20ms, availability limited only by one machine. Don't add anything yet: premature scaling is its own bug, and every component you add is a new thing that can fail.",
   },
   {
     users: "1,000",
     rps: "~50 req/s",
     demand: 0.35,
-    narrative: "Still comfortable, but the app server is starting to warm up under sustained load. A good moment to think ahead.",
+    narrative: "Still comfortable, but the app server is sustaining real load. Connection pools fill, GC pauses become visible in tails. A good moment to instrument (metrics, structured logs) so you see the next bottleneck before users do.",
   },
   {
     users: "10,000",
     rps: "~500 req/s",
     demand: 0.6,
-    narrative: "The database is doing the same expensive reads over and over, and one app server is no longer enough headroom.",
+    narrative: "Two pressures emerge: the app server's CPU is the ceiling for concurrent requests, and the database re-executes identical reads thousands of times. A load balancer adds app capacity; a cache collapses the redundant reads.",
   },
   {
     users: "100,000",
     rps: "~5k req/s",
     demand: 0.85,
-    narrative: "Read load is crushing the primary database. Without caching and replicas, query latency spikes and timeouts cascade.",
+    narrative: "Read load dominates — the primary's connection pool saturates, query latency spikes, and timeouts cascade to the app tier. Caching absorbs the hot reads; read replicas handle the long tail. Without both, the primary becomes the chokepoint for the entire system.",
   },
   {
     users: "1,000,000",
     rps: "~50k req/s",
     demand: 1.1,
-    narrative: "Even reads are handled — now write volume itself exceeds a single primary. This is where sharding stops being optional.",
+    narrative: "Reads are solved, but write volume now exceeds a single primary's throughput — row-level locks contend, replication lag grows, and the WAL becomes the bottleneck. Sharding partitions writes across machines; a message queue smooths the spikes so the write path isn't bursty.",
   },
 ];
 
@@ -109,6 +109,8 @@ export interface SimulationResult {
   edges: SimEdgeState[];
   bottleneck: string | null;
   bottleneckHeat: number;
+  /** Metric→cause→consequence→fix reasoning for the current bottleneck. */
+  bottleneckExplanation: string | null;
   suggestions: string[];
   narrative: string;
   /** Secondary, non-blocking observations (hot keys, queue lag, the frontier). */
@@ -292,6 +294,25 @@ export function computeSimulation(tierIndex: number, sols: Set<string>): Simulat
     bottleneckHeat = aHeat;
   }
 
+  // Per-bottleneck reasoning: metric → cause → consequence → fix
+  let bottleneckExplanation: string | null = null;
+  if (bottleneck === "db") {
+    const readHot = dbReadHeat(demand, sols) > dbWriteHeat(demand, sols);
+    if (readHot) {
+      bottleneckExplanation = has(sols, "cache")
+        ? "The cache absorbs hot reads, but the long-tail queries still saturate the primary's connection pool. Read replicas offload those queries to dedicated copies, multiplying read capacity without touching the write path."
+        : "Identical rows are read thousands of times per second — each a full query plan, index scan, and network round-trip. A cache serves hot reads from memory in microseconds, collapsing this redundant work.";
+    } else {
+      bottleneckExplanation = has(sols, "queue")
+        ? "The queue smooths write spikes, but the single primary's row-level locks and WAL throughput are the ceiling. Sharding partitions data across multiple primaries so writes parallelise instead of contending."
+        : "Write volume exceeds what one database primary can commit — row locks contend, replication lag grows, and the WAL becomes the bottleneck. A message queue buffers bursts so writes arrive at a steady, sustainable rate.";
+    }
+  } else if (bottleneck === "app") {
+    bottleneckExplanation = has(sols, "cdn")
+      ? "Even with static assets offloaded to the CDN, dynamic request volume exceeds one server's CPU and memory. A load balancer distributes requests across multiple identical app instances, multiplying capacity and adding fault tolerance."
+      : "Every request — static and dynamic — hits this one server. A CDN serves cacheable content from the edge, cutting ~40% of traffic before it reaches you. A load balancer then spreads the remaining dynamic requests across multiple servers.";
+  }
+
   // Suggestions: inactive solutions that measurably cool the current bottleneck.
   const suggestions: string[] = [];
   if (bottleneck) {
@@ -337,6 +358,7 @@ export function computeSimulation(tierIndex: number, sols: Set<string>): Simulat
     edges,
     bottleneck,
     bottleneckHeat,
+    bottleneckExplanation,
     suggestions,
     narrative: tier.narrative,
     notes,

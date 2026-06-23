@@ -134,6 +134,11 @@ export function SimulatorBar() {
               ? sim.narrative
               : "Solved — your architecture absorbs this scale. Slide traffic higher to uncover the next bottleneck."}
           </p>
+          {sim.bottleneckExplanation && (
+            <p className="mt-1.5 text-[11.5px] leading-snug" style={{ color: "var(--text-faint)" }}>
+              <span style={{ color: "#a5b4fc" }}>Why: </span>{sim.bottleneckExplanation}
+            </p>
+          )}
           <div className="mt-2 flex flex-wrap gap-2">
             <span
               className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11.5px] font-medium tabular-nums"

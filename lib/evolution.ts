@@ -22,6 +22,8 @@ export interface EvolutionStage {
   title: string;
   trigger: string;
   narrative: string;
+  /** What new operational/design problems this stage introduces. */
+  complexity?: string;
   addNodes: string[];
   addEdges: MapEdgeDef[];
   removeEdges?: string[];
@@ -55,6 +57,7 @@ export const EVOLUTION_STAGES: EvolutionStage[] = [
     trigger: "Launch · ~100 users",
     narrative:
       "One server runs the app and talks to one database. Simple, cheap, and perfectly adequate. Most systems should stay here far longer than ego allows.",
+    complexity: "One machine is a single point of failure — if it dies, the whole system is down. No horizontal headroom, and deployments require downtime. But at this scale those are acceptable tradeoffs for simplicity.",
     addNodes: ["client", "services", "database"],
     addEdges: [
       { id: "e-cl-svc", source: "client", target: "services" },
@@ -75,6 +78,7 @@ export const EVOLUTION_STAGES: EvolutionStage[] = [
     },
     narrative:
       "A single server has a hard ceiling. Put a load balancer in front and run several identical app servers behind it — now you scale horizontally and survive a server dying.",
+    complexity: "App servers must now be stateless — no local session storage, no local file writes. Health checks, rolling deploys, and session affinity become new concerns. The load balancer itself needs to be highly available (often a managed service).",
     addNodes: ["load-balancer"],
     removeEdges: ["e-cl-svc"],
     addEdges: [
@@ -96,6 +100,7 @@ export const EVOLUTION_STAGES: EvolutionStage[] = [
     },
     narrative:
       "The same hot rows are read over and over. A Redis cache in front of the database serves them from memory, collapsing read latency and shielding the primary.",
+    complexity: "Cache invalidation is now your problem — stale data, thundering herds on expiry, and cold-start stampedes when the cache restarts. You need an eviction policy (LRU), TTL tuning, and a plan for what happens when Redis goes down (does the DB survive the sudden read storm?).",
     addNodes: ["cache"],
     addEdges: [
       { id: "e-svc-cache", source: "services", target: "cache", sourceHandle: "sl", targetHandle: "tr" },
@@ -115,6 +120,7 @@ export const EVOLUTION_STAGES: EvolutionStage[] = [
     },
     narrative:
       "Users far from your data centre wait on every asset. A CDN caches static content at the edge, cutting latency and absorbing a huge share of traffic before it reaches you.",
+    complexity: "Cache-busting and purge propagation across dozens of PoPs become real concerns. Stale HTML served from the edge can break deployments. You now manage two caching layers (CDN + Redis) with different invalidation models.",
     addNodes: ["cdn"],
     removeEdges: ["e-cl-lb"],
     addEdges: [
@@ -135,6 +141,7 @@ export const EVOLUTION_STAGES: EvolutionStage[] = [
     },
     narrative:
       "Not everything must happen during the request. A queue lets you accept work instantly and process it asynchronously — and the same events feed an analytics pipeline.",
+    complexity: "You now have eventual consistency between the API response ('accepted') and actual completion. Dead-letter queues, poison messages, idempotent consumers, and monitoring queue depth are new operational concerns. Workers that crash mid-processing can duplicate or lose work without careful design.",
     addNodes: ["message-queue", "analytics"],
     addEdges: [
       { id: "e-svc-mq", source: "services", target: "message-queue", sourceHandle: "sr", targetHandle: "tl" },
@@ -154,6 +161,7 @@ export const EVOLUTION_STAGES: EvolutionStage[] = [
     },
     narrative:
       "One codebase becomes a bottleneck for many teams. Split it into services behind an API Gateway, so each can deploy and scale independently — at the cost of real distributed complexity.",
+    complexity: "Every function call is now a network call — with latency, failure modes, and serialisation cost. Distributed transactions (sagas), service discovery, API versioning, and cascading failures (circuit breakers) are new realities. A cross-service query that was a simple JOIN is now an API call or event-driven join.",
     addNodes: ["api-gateway"],
     removeEdges: ["e-lb-svc"],
     addEdges: [
@@ -175,6 +183,7 @@ export const EVOLUTION_STAGES: EvolutionStage[] = [
     },
     narrative:
       "Running many services across many machines by hand is hopeless. Kubernetes schedules, heals and scales containers from a declarative spec — you describe the goal, it maintains it.",
+    complexity: "YAML sprawl, networking policies, RBAC, persistent volume management, and cluster upgrades are now ongoing work. Debugging a pod crash loop across namespace boundaries is harder than tailing a single process. The abstraction is powerful but leaks under pressure (storage, DNS, node affinity).",
     addNodes: ["kubernetes"],
     addEdges: [
       { id: "e-k8s-svc", source: "kubernetes", target: "services", dashed: true, label: "orchestrates", sourceHandle: "sl", targetHandle: "tr" },
@@ -193,6 +202,7 @@ export const EVOLUTION_STAGES: EvolutionStage[] = [
     },
     narrative:
       "At this complexity, incidents are inevitable and opaque. Logs, metrics and traces let you ask new questions of a live system — turning 'it's slow somewhere' into a precise answer.",
+    complexity: "Telemetry volume grows with traffic and service count — storage costs climb, dashboards proliferate, and alert fatigue is a real risk. Sampling strategies, retention policies, and correlating logs↔traces↔metrics across services are non-trivial ongoing work.",
     addNodes: ["observability"],
     addEdges: [
       { id: "e-obs-svc", source: "observability", target: "services", dashed: true, label: "traces", sourceHandle: "sr", targetHandle: "tl" },
@@ -212,6 +222,7 @@ export const EVOLUTION_STAGES: EvolutionStage[] = [
     },
     narrative:
       "One region is a single point of failure and a latency floor for distant users. Geo-routing DNS sends users to their nearest region, each a full replica with its own read replicas. You've arrived.",
+    complexity: "Cross-region replication lag makes strong consistency across regions extremely expensive. You must choose: route writes to one primary (latency penalty for far users) or accept eventual consistency with conflict resolution. DNS failover, data sovereignty, and region-aware deployments add operational dimensions that didn't exist before.",
     addNodes: ["dns", "read-replica"],
     removeEdges: ["e-cl-lb"],
     addEdges: [

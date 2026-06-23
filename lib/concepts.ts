@@ -1108,6 +1108,24 @@ const INFRA_CONCEPTS: Concept[] = [
       { label: "AWS — RDS read replicas", url: "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_ReadRepl.html" },
       { label: "Martin Kleppmann — Designing Data-Intensive Applications (Ch. 5)", url: "https://dataintensive.net/" },
     ],
+    internal: {
+      summary: "The primary streams its write-ahead log (WAL) to replicas, which replay the changes asynchronously to stay in sync.",
+      nodes: [
+        { id: "write", label: "Write to Primary", sublabel: "INSERT / UPDATE", kind: "start", detail: "All writes go to the single primary. The primary writes the change to its write-ahead log (WAL) before confirming to the client — this makes it durable and replayable." },
+        { id: "wal", label: "WAL Record", sublabel: "write-ahead log", kind: "step", detail: "The change is appended to the WAL — a sequential, append-only log of every mutation. This is the source of truth for replication: replicas don't re-execute SQL, they replay WAL entries." },
+        { id: "stream", label: "Stream to Replicas", sublabel: "async shipping", kind: "step", detail: "The primary continuously ships WAL records to each replica over a persistent connection. This is asynchronous by default — the primary doesn't wait for replicas to confirm before committing." },
+        { id: "replay", label: "Replay on Replica", sublabel: "apply changes", kind: "step", detail: "Each replica applies WAL records in order, arriving at the same state as the primary — just slightly behind. The gap is replication lag, typically milliseconds to seconds." },
+        { id: "lag", label: "Replication Lag", sublabel: "ms to seconds", kind: "decision", detail: "The lag between primary commit and replica visibility. Under normal load it's milliseconds; under write spikes or replica resource pressure it can grow to seconds — this is when read-your-writes becomes inconsistent." },
+        { id: "read", label: "Read from Replica", sublabel: "query offloaded", kind: "terminal", detail: "Read traffic is routed to replicas, offloading the primary. The tradeoff: reads may reflect a slightly older state. For most use cases (product pages, dashboards) this is fine." },
+      ],
+      edges: [
+        { source: "write", target: "wal" },
+        { source: "wal", target: "stream" },
+        { source: "stream", target: "replay" },
+        { source: "replay", target: "lag" },
+        { source: "lag", target: "read" },
+      ],
+    },
   },
 
   // ───────────────────────────────────────── Sharding
@@ -1242,6 +1260,24 @@ const INFRA_CONCEPTS: Concept[] = [
       { label: "Stripe — Rate limiting strategies", url: "https://stripe.com/blog/rate-limiters" },
       { label: "RFC 6585 — 429 Too Many Requests", url: "https://datatracker.ietf.org/doc/html/rfc6585#section-4" },
     ],
+    internal: {
+      summary: "A token bucket fills at a steady rate; each request consumes a token. When the bucket empties, excess requests are rejected until tokens refill.",
+      nodes: [
+        { id: "req", label: "Incoming Request", kind: "start", detail: "A request arrives at the rate-limited endpoint. Before it touches any business logic, the limiter must decide: allow or reject." },
+        { id: "bucket", label: "Token Bucket", sublabel: "capacity: N tokens", kind: "step", detail: "The bucket holds up to N tokens and refills at a fixed rate (e.g. 100/sec). Each token represents permission to process one request." },
+        { id: "check", label: "Token available?", kind: "decision", detail: "The limiter atomically checks and decrements. In a distributed setup this is a Redis EVAL (Lua script) or MULTI/EXEC to avoid race conditions between nodes." },
+        { id: "allow", label: "Allow", sublabel: "consume 1 token", kind: "terminal", detail: "A token is consumed and the request proceeds. The remaining count is often returned in response headers (X-RateLimit-Remaining) so clients can self-throttle." },
+        { id: "reject", label: "429 Too Many Requests", sublabel: "Retry-After header", kind: "terminal", detail: "No tokens left — the server returns 429 with a Retry-After header. Well-behaved clients back off; aggressive ones hit the limit again and stay rejected." },
+        { id: "refill", label: "Refill Timer", sublabel: "steady drip", kind: "step", detail: "Tokens are added at a constant rate regardless of consumption. This allows short bursts (up to bucket capacity) while enforcing a sustained average rate." },
+      ],
+      edges: [
+        { source: "req", target: "bucket" },
+        { source: "bucket", target: "check" },
+        { source: "check", target: "allow", label: "yes" },
+        { source: "check", target: "reject", label: "no" },
+        { source: "refill", target: "bucket", label: "add tokens" },
+      ],
+    },
   },
 
   // ───────────────────────────────────────── Circuit Breaker
@@ -1807,6 +1843,26 @@ const INFRA_CONCEPTS: Concept[] = [
       { label: "RFC 9110 — HTTP Semantics", url: "https://www.rfc-editor.org/rfc/rfc9110" },
       { label: "Cloudflare — HTTP/1 vs HTTP/2 vs HTTP/3", url: "https://www.cloudflare.com/learning/performance/http2-vs-http1.1/" },
     ],
+    internal: {
+      summary: "An HTTP request travels from the client through DNS, TCP, optional TLS, the request/response exchange, and potentially a cache — before the browser renders the result.",
+      nodes: [
+        { id: "client", label: "Browser / Client", kind: "start", detail: "The user clicks a link or an API client calls fetch(). Before any HTTP bytes flow, the client needs an IP address — so the journey starts with DNS." },
+        { id: "dns", label: "DNS Lookup", sublabel: "hostname → IP", kind: "step", detail: "The client resolves the hostname to an IP. This is cached aggressively (browser cache, OS cache, resolver cache), so it's usually instant after the first hit." },
+        { id: "tcp", label: "TCP Handshake", sublabel: "SYN → SYN-ACK → ACK", kind: "step", detail: "A three-way handshake establishes a reliable connection. This adds one round-trip of latency — which is why connection reuse (keep-alive) matters." },
+        { id: "tls", label: "TLS Handshake", sublabel: "negotiate cipher + certs", kind: "step", detail: "For HTTPS, another 1–2 round-trips negotiate encryption. TLS 1.3 cuts this to one round-trip; 0-RTT resumption can eliminate it entirely on repeat visits." },
+        { id: "send", label: "Send Request", sublabel: "method + headers + body", kind: "step", detail: "The client sends the HTTP request: method (GET/POST), headers (Host, Accept, Auth), and optionally a body. The server now has everything it needs." },
+        { id: "process", label: "Server Processes", sublabel: "route → handler → DB", kind: "step", detail: "The server routes the request to a handler, runs business logic, queries the database, and assembles a response. This is where your application code lives." },
+        { id: "response", label: "Response", sublabel: "status + headers + body", kind: "terminal", detail: "The server returns a status code (200, 404, 500), cache headers (Cache-Control, ETag), and the response body. The client uses the status to decide what to show." },
+      ],
+      edges: [
+        { source: "client", target: "dns" },
+        { source: "dns", target: "tcp" },
+        { source: "tcp", target: "tls" },
+        { source: "tls", target: "send" },
+        { source: "send", target: "process" },
+        { source: "process", target: "response" },
+      ],
+    },
   },
 
   // ───────────────────────────────────────── REST
