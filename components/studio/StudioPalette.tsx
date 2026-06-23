@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Trash2, Sparkles, Plus } from "lucide-react";
+import { Trash2, X, Sparkles, Plus } from "lucide-react";
 import { BUILDABLE } from "@/lib/studio";
 import { CUSTOM_KINDS, KIND_META, type NodeKind } from "@/lib/studioTypes";
 import { getConcept } from "@/lib/concepts";
@@ -16,9 +16,11 @@ interface Props {
   onAddCustom: (kind: NodeKind) => void;
   onClear: () => void;
   onExample: () => void;
+  selectedNodeId?: string | null;
+  onDeleteSelected?: () => void;
 }
 
-export function StudioPalette({ count, onAdd, onAddCustom, onClear, onExample }: Props) {
+export function StudioPalette({ count, onAdd, onAddCustom, onClear, onExample, selectedNodeId, onDeleteSelected }: Props) {
   const grouped = useMemo(() => {
     const map = new Map<CategoryId, Concept[]>();
     for (const id of BUILDABLE) {
@@ -41,7 +43,12 @@ export function StudioPalette({ count, onAdd, onAddCustom, onClear, onExample }:
         <button onClick={onExample} className="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-[11.5px] font-semibold transition-all hover:brightness-110" style={{ background: "rgba(99,102,241,0.2)", border: "1px solid rgba(99,102,241,0.45)", color: "#c7d2fe" }}>
           <Sparkles size={12} /> Example
         </button>
-        <button onClick={onClear} disabled={count === 0} className="flex items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11.5px] font-medium transition-all enabled:hover:bg-white/10 disabled:opacity-30" style={{ border: "1px solid var(--border)", color: "var(--text-dim)" }} title="Clear canvas">
+        {selectedNodeId && (
+          <button onClick={onDeleteSelected} className="flex items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11.5px] font-medium transition-all hover:bg-white/10" style={{ border: "1px solid var(--border)", color: "var(--bad)", background: "rgba(248,113,113,0.08)" }} title="Delete selected node (or press Delete)">
+            <X size={13} /> Delete
+          </button>
+        )}
+        <button onClick={onClear} disabled={count === 0} className="flex items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11.5px] font-medium transition-all enabled:hover:bg-white/10 disabled:opacity-30" style={{ border: "1px solid var(--border)", color: "var(--text-dim)" }} title="Clear canvas (Cmd/Ctrl+A, then Delete)">
           <Trash2 size={13} />
         </button>
       </div>

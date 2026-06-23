@@ -104,7 +104,20 @@ export function Studio() {
 
   const [target, setTarget] = useState<Requirements>(DEFAULT_TARGET);
 
-  const onNodesChange = useCallback((c: NodeChange[]) => setNodes((ns) => applyNodeChanges(c, ns)), [setNodes]);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
+  const onNodesChange = useCallback(
+    (c: NodeChange[]) => {
+      // Track selected node so we can show a delete button.
+      for (const change of c) {
+        if (change.type === "select") {
+          setSelectedNodeId(change.selected ? change.id : null);
+        }
+      }
+      setNodes((ns) => applyNodeChanges(c, ns));
+    },
+    [setNodes],
+  );
   const onEdgesChange = useCallback((c: EdgeChange[]) => setEdges((es) => applyEdgeChanges(c, es)), [setEdges]);
   const onConnect = useCallback(
     (conn: Connection) =>
@@ -174,13 +187,22 @@ export function Studio() {
     stressTestDesign(solutionsFor(reviewNodes, reviewEdges));
   }, [stressTestDesign, reviewNodes, reviewEdges]);
 
+  const deleteSelectedNode = useCallback(() => {
+    if (selectedNodeId) {
+      setNodes((ns) => ns.filter((n) => n.id !== selectedNodeId));
+      // Also remove edges connected to this node.
+      setEdges((es) => es.filter((e) => e.source !== selectedNodeId && e.target !== selectedNodeId));
+      setSelectedNodeId(null);
+    }
+  }, [selectedNodeId, setNodes, setEdges]);
+
   const [mobilePanel, setMobilePanel] = useState<"palette" | "analysis" | null>(null);
 
   return (
     <div className="absolute inset-x-2 bottom-2 top-[56px] z-10 flex flex-col gap-2 sm:inset-x-3 sm:bottom-3 sm:top-[64px] lg:flex-row lg:gap-3">
       {/* Side palette — wide widths only (canvas-first on tablet/mobile). */}
       <div className="hidden lg:block">
-        <StudioPalette count={nodes.length} onAdd={addComponent} onAddCustom={addCustom} onClear={clear} onExample={loadExample} />
+        <StudioPalette count={nodes.length} onAdd={addComponent} onAddCustom={addCustom} onClear={clear} onExample={loadExample} selectedNodeId={selectedNodeId} onDeleteSelected={deleteSelectedNode} />
       </div>
 
       <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-2xl" style={{ border: "1px solid var(--border)", background: "rgba(255,255,255,0.015)" }}>
@@ -246,7 +268,7 @@ export function Studio() {
             </div>
             <div className="scroll-fade max-h-[calc(55vh-44px)] overflow-y-auto">
               {mobilePanel === "palette" ? (
-                <StudioPalette count={nodes.length} onAdd={addComponent} onAddCustom={addCustom} onClear={clear} onExample={() => { loadExample(); setMobilePanel(null); }} />
+                <StudioPalette count={nodes.length} onAdd={addComponent} onAddCustom={addCustom} onClear={clear} onExample={() => { loadExample(); setMobilePanel(null); }} selectedNodeId={selectedNodeId} onDeleteSelected={deleteSelectedNode} />
               ) : (
                 <StudioAnalysis review={review} target={target} onTarget={setTarget} onStressTest={onStressTest} />
               )}
