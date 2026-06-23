@@ -102,6 +102,16 @@ const INFRA_CONCEPTS: Concept[] = [
     ],
     scaling:
       "DNS scales through aggressive caching and anycast: the same record is served from thousands of edge locations, so lookups stay sub-10ms regardless of global query volume.",
+    whenToUse:
+      "Always — it's foundational. Lean on it deliberately for geo-routing, weighted/canary rollouts, and health-based failover, and lower TTLs ahead of a planned migration so changes propagate quickly.",
+    whenNotToUse:
+      "Don't use DNS as your only failover mechanism for fast recovery — TTL caching means clients can keep hitting a dead IP for minutes. For internal east-west service discovery, a registry (Consul/etcd) reacts faster than public DNS.",
+    relatedConcepts: ["cdn", "load-balancer", "client", "failover", "http"],
+    sources: [
+      { label: "RFC 1034 — Domain Names: Concepts and Facilities", url: "https://www.rfc-editor.org/rfc/rfc1034" },
+      { label: "Cloudflare — What is DNS?", url: "https://www.cloudflare.com/learning/dns/what-is-dns/" },
+      { label: "AWS — Route 53 routing policies", url: "https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/routing-policy.html" },
+    ],
     internal: {
       summary: "A recursive resolver walks the DNS hierarchy until it finds an authoritative answer, caching at every hop.",
       nodes: [
@@ -186,6 +196,16 @@ const INFRA_CONCEPTS: Concept[] = [
     ],
     scaling:
       "CDNs are the original horizontally-scaled system: add more PoPs and the cache hit ratio climbs while origin load stays flat. The metric that matters is hit ratio — every percentage point is origin traffic you never pay for.",
+    whenToUse:
+      "For static and cacheable assets (images, JS/CSS, video, downloads) served to a geographically spread audience, and increasingly for cacheable API responses and edge compute. Also a front-line DDoS absorption layer.",
+    whenNotToUse:
+      "For highly dynamic, per-user, uncacheable responses there's little to cache (though edge TLS termination and DDoS protection can still help). Cache invalidation of frequently-changing assets adds complexity you may not want.",
+    relatedConcepts: ["dns", "cache", "reverse-proxy", "object-store", "http"],
+    sources: [
+      { label: "Cloudflare — What is a CDN?", url: "https://www.cloudflare.com/learning/cdn/what-is-a-cdn/" },
+      { label: "AWS — How CloudFront delivers content", url: "https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/HowCloudFrontWorks.html" },
+      { label: "MDN — HTTP caching", url: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Caching" },
+    ],
     internal: {
       summary: "A request lands at the nearest edge PoP; a cache hit returns instantly, a miss fetches from origin and populates the edge.",
       nodes: [
@@ -254,6 +274,16 @@ const INFRA_CONCEPTS: Concept[] = [
     ],
     scaling:
       "The balancer is what makes the stateless app tier infinitely scalable — but push state out (to cache/DB) so any server can handle any request. Beyond one region, layer a global balancer on top of regional ones.",
+    whenToUse:
+      "The moment you run more than one instance of anything stateless — to spread load, route around dead instances, and present a single stable address. L4 for raw throughput, L7 when you need path/host routing, TLS termination or header-aware decisions.",
+    whenNotToUse:
+      "For a single instance with no redundancy it adds a hop for no benefit. It also can't rescue a stateful app that pins users to one server — fix the state first (externalise sessions), or the balancer just spreads load it can't actually move.",
+    relatedConcepts: ["reverse-proxy", "api-gateway", "dns", "failover", "services"],
+    sources: [
+      { label: "Cloudflare — What is load balancing?", url: "https://www.cloudflare.com/learning/performance/what-is-load-balancing/" },
+      { label: "NGINX — Load balancing", url: "https://docs.nginx.com/nginx/admin-guide/load-balancer/http-load-balancer/" },
+      { label: "AWS — Elastic Load Balancing types", url: "https://docs.aws.amazon.com/elasticloadbalancing/latest/userguide/what-is-load-balancing.html" },
+    ],
     internal: {
       summary: "Incoming requests are assigned to a healthy server by a routing strategy; health checks keep the pool honest.",
       nodes: [
@@ -341,6 +371,16 @@ const INFRA_CONCEPTS: Concept[] = [
     ],
     scaling:
       "Keep the gateway stateless and horizontally scaled behind a load balancer. Offload heavy work (auth token validation) to caches, and resist the urge to let business logic creep in.",
+    whenToUse:
+      "Once you have multiple services and want one front door to centralise auth, rate limiting, routing, and request shaping — so every service doesn't reimplement them. The natural public edge of a microservice system.",
+    whenNotToUse:
+      "For a single service, a plain reverse proxy is lighter. Beware letting business logic leak into the gateway — that turns it into a distributed monolith and a deployment bottleneck every team must coordinate through.",
+    relatedConcepts: ["reverse-proxy", "load-balancer", "rate-limiting", "services", "rest"],
+    sources: [
+      { label: "Microsoft Azure — API Gateway pattern", url: "https://learn.microsoft.com/en-us/azure/architecture/microservices/design/gateway" },
+      { label: "NGINX — API gateway", url: "https://www.nginx.com/learn/api-gateway/" },
+      { label: "AWS — What is an API gateway?", url: "https://aws.amazon.com/what-is/api-gateway/" },
+    ],
     internal: {
       summary: "Each request flows through a pipeline of cross-cutting stages before being routed to the right backend service.",
       nodes: [
@@ -407,6 +447,16 @@ const INFRA_CONCEPTS: Concept[] = [
     ],
     scaling:
       "Keep services stateless so any instance handles any request, then scale horizontally behind the load balancer. Communicate async (events) where you can to avoid synchronous failure chains.",
+    whenToUse:
+      "When teams and domains have grown enough that a single codebase slows everyone down, and parts of the system need to scale or deploy independently. Split along clear domain boundaries with their own data.",
+    whenNotToUse:
+      "Early on, or for small teams — a well-structured monolith ships faster and is far easier to operate than a distributed system. Premature microservices buy network failures, latency and operational load for org benefits you don't yet need.",
+    relatedConcepts: ["api-gateway", "message-queue", "kubernetes", "federation", "circuit-breaker"],
+    sources: [
+      { label: "Martin Fowler — Microservices", url: "https://martinfowler.com/articles/microservices.html" },
+      { label: "Martin Fowler — MonolithFirst", url: "https://martinfowler.com/bliki/MonolithFirst.html" },
+      { label: "Microsoft — Microservices architecture style", url: "https://learn.microsoft.com/en-us/azure/architecture/guide/architecture-styles/microservices" },
+    ],
     internal: {
       summary: "Behind the gateway, focused services each own their data and collaborate over synchronous calls and an async event bus.",
       nodes: [
@@ -678,6 +728,16 @@ const INFRA_CONCEPTS: Concept[] = [
     ],
     scaling:
       "Scale with replication for read availability and sharding (hash slots) for capacity. Guard against stampedes with request coalescing and jittered TTLs; pick an eviction policy (LRU/LFU) that matches your access pattern.",
+    whenToUse:
+      "Read-heavy workloads with hot keys read far more than written — sessions, feeds, product pages, rate-limiter counters, leaderboards. Anywhere repeated reads of the same data are pounding a slower datastore.",
+    whenNotToUse:
+      "For write-heavy or rarely-re-read data (the cache churns without ever paying off), or where every read must be perfectly fresh and you can't tolerate any staleness window. A cache adds an invalidation problem — don't take it on for no read benefit.",
+    relatedConcepts: ["read-replica", "database", "cqrs", "consistent-hashing", "denormalization"],
+    sources: [
+      { label: "Redis — Documentation", url: "https://redis.io/docs/latest/" },
+      { label: "AWS — Caching strategies (ElastiCache)", url: "https://docs.aws.amazon.com/AmazonElastiCache/latest/dg/Strategies.html" },
+      { label: "Cloudflare — What is caching?", url: "https://www.cloudflare.com/learning/cdn/what-is-caching/" },
+    ],
     internal: {
       summary: "The classic cache-aside read path: check the cache, fall back to the database on a miss, then backfill the cache.",
       nodes: [
@@ -760,6 +820,16 @@ const INFRA_CONCEPTS: Concept[] = [
     ],
     scaling:
       "Scale reads first with replicas and caching; scale writes last with sharding (the nuclear option — it complicates everything). The CAP theorem forces a choice under partition: stay consistent or stay available.",
+    whenToUse:
+      "As the system of record for anything that must be durable and queryable. Reach for a relational DB by default — its transactions, constraints and joins are exactly what most applications need until proven otherwise.",
+    whenNotToUse:
+      "Don't stuff large blobs (use an object store), high-throughput event streams (use a log/queue), or pure ephemeral hot data (use a cache) into the primary database. Each has a purpose-built home that keeps the DB lean.",
+    relatedConcepts: ["read-replica", "sharding", "cache", "indexing", "cap-theorem", "nosql"],
+    sources: [
+      { label: "PostgreSQL — Documentation", url: "https://www.postgresql.org/docs/current/" },
+      { label: "Martin Kleppmann — Designing Data-Intensive Applications", url: "https://dataintensive.net/" },
+      { label: "AWS — Relational vs non-relational databases", url: "https://aws.amazon.com/relational-database/" },
+    ],
     internal: {
       summary: "A single primary takes all writes and streams them to read replicas, which absorb the read load.",
       nodes: [
@@ -841,6 +911,16 @@ const INFRA_CONCEPTS: Concept[] = [
     ],
     scaling:
       "Partition the topic to scale throughput — each partition is an ordered, independently-consumed log. Consumer groups parallelise processing; more partitions means more parallel consumers, at the cost of cross-partition ordering.",
+    whenToUse:
+      "To decouple producers from consumers in time — absorbing spikes, fanning one event out to many consumers, and smoothing write bursts. Essential for event-driven architectures and reliable async work hand-off.",
+    whenNotToUse:
+      "When the caller needs an immediate, synchronous answer (use a direct call/RPC), or for tiny systems where a queue is operational overhead you don't yet need. A log (Kafka) and a task queue solve different problems — don't conflate them.",
+    relatedConcepts: ["task-queue", "worker-service", "back-pressure", "write-api-async", "cqrs"],
+    sources: [
+      { label: "Apache Kafka — Documentation (intro)", url: "https://kafka.apache.org/documentation/#introduction" },
+      { label: "Confluent — What is a message queue?", url: "https://www.confluent.io/learn/message-queue/" },
+      { label: "AWS — Message queues", url: "https://aws.amazon.com/message-queue/" },
+    ],
     internal: {
       summary: "A producer writes to a partitioned topic; independent consumer groups each read the full stream at their own pace.",
       nodes: [
@@ -958,6 +1038,16 @@ const INFRA_CONCEPTS: Concept[] = [
     ],
     scaling:
       "Replicas scale reads but not writes — when the single primary can't keep up with writes, replicas can't save you and sharding becomes unavoidable.",
+    whenToUse:
+      "When reads dominate and are straining the primary — the first, cheapest horizontal scaling move for a database. Also for serving analytics/reporting off a replica so heavy queries don't touch the write primary.",
+    whenNotToUse:
+      "When the bottleneck is writes (replicas don't help — shard instead), or when every read must reflect the latest write and you can't tolerate replication lag. Route read-your-own-write traffic to the primary.",
+    relatedConcepts: ["database", "sharding", "cache", "cqrs", "consistency-models", "failover"],
+    sources: [
+      { label: "PostgreSQL — Replication & high availability", url: "https://www.postgresql.org/docs/current/high-availability.html" },
+      { label: "AWS — RDS read replicas", url: "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_ReadRepl.html" },
+      { label: "Martin Kleppmann — Designing Data-Intensive Applications (Ch. 5)", url: "https://dataintensive.net/" },
+    ],
   },
 
   // ───────────────────────────────────────── Sharding
@@ -1006,6 +1096,16 @@ const INFRA_CONCEPTS: Concept[] = [
     ],
     scaling:
       "Sharding is how you scale past a single machine — but it pushes complexity up into the application. Choose a key with high cardinality and even access to avoid hotspots; resharding later is the thing everyone dreads.",
+    whenToUse:
+      "Only when a single primary genuinely can't hold the data or absorb the write throughput, and you've already exhausted replicas, caching and vertical scaling. The last resort for write scale.",
+    whenNotToUse:
+      "Before you've truly outgrown one machine — sharding breaks cross-shard joins and transactions and makes everything harder. If reads are the problem, replicas/caching are far cheaper. A bad shard key is a future migration nightmare.",
+    relatedConcepts: ["database", "read-replica", "consistent-hashing", "federation", "cap-theorem"],
+    sources: [
+      { label: "AWS — What is database sharding?", url: "https://aws.amazon.com/what-is/database-sharding/" },
+      { label: "MongoDB — Sharding", url: "https://www.mongodb.com/docs/manual/sharding/" },
+      { label: "Vitess — Sharding (horizontal scaling of MySQL)", url: "https://vitess.io/docs/concepts/shard/" },
+    ],
     internal: {
       summary: "A router hashes the shard key to pick exactly one shard, so each query touches a single partition of the data.",
       nodes: [
@@ -1120,6 +1220,16 @@ const INFRA_CONCEPTS: Concept[] = [
     ],
     scaling:
       "Breakers are essential once you have a web of synchronous service calls — they keep one slow node from taking down the fleet. Pair with timeouts and bulkheads for layered defence.",
+    whenToUse:
+      "Around any synchronous call to a dependency that can fail or slow down — especially in a mesh of services where a single slow node could otherwise tie up every caller's threads and cascade into a system-wide stall.",
+    whenNotToUse:
+      "For purely local, in-process calls that can't fail remotely, or for async/queued work where there's no caller blocking on a response. A breaker also needs a sensible fallback — tripping it with nothing to fall back to just fails faster.",
+    relatedConcepts: ["retry", "rpc", "services", "failover", "back-pressure"],
+    sources: [
+      { label: "Martin Fowler — CircuitBreaker", url: "https://martinfowler.com/bliki/CircuitBreaker.html" },
+      { label: "Google SRE — Addressing Cascading Failures", url: "https://sre.google/sre-book/addressing-cascading-failures/" },
+      { label: "Microsoft Azure — Circuit Breaker pattern", url: "https://learn.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker" },
+    ],
     internal: {
       summary: "The breaker moves between three states based on the health of the dependency, testing recovery before fully trusting it again.",
       nodes: [
@@ -1343,6 +1453,16 @@ const INFRA_CONCEPTS: Concept[] = [
     ],
     scaling:
       "Telemetry grows with traffic, so sample traces and aggregate metrics to control cost. The goal is high-cardinality insight without storing every single event forever.",
+    whenToUse:
+      "From day one in any system you intend to operate — and non-negotiably once you have multiple services, where failures hide in the gaps between them. Define SLIs/SLOs and instrument before you need to debug, not during the incident.",
+    whenNotToUse:
+      "There's no real 'don't' — but resist over-instrumenting: unbounded high-cardinality metrics and 100% trace retention get expensive fast, and noisy alerts that don't map to user pain cause fatigue and get ignored.",
+    relatedConcepts: ["services", "kubernetes", "circuit-breaker", "load-balancer"],
+    sources: [
+      { label: "Google SRE — Monitoring Distributed Systems", url: "https://sre.google/sre-book/monitoring-distributed-systems/" },
+      { label: "OpenTelemetry — Observability primer", url: "https://opentelemetry.io/docs/concepts/observability-primer/" },
+      { label: "Google SRE — Service Level Objectives", url: "https://sre.google/sre-book/service-level-objectives/" },
+    ],
   },
 
   // ───────────────────────────────────────── CQRS
@@ -1757,6 +1877,16 @@ const INFRA_CONCEPTS: Concept[] = [
     ],
     scaling:
       "Object stores scale horizontally by design — the cloud provider handles partitioning and replication. Your job is key design (avoid hot prefixes) and lifecycle policies (move old objects to cold tiers).",
+    whenToUse:
+      "For large, immutable-ish binary blobs — images, video, backups, logs, data-lake files, static site assets — especially when fronted by a CDN. The default home for anything too big to belong in a database row.",
+    whenNotToUse:
+      "For small, frequently-updated, relational or transactional data (use a database), or low-latency random access to tiny records (use a cache/KV store). No in-place edits, no joins, no strong read-after-write everywhere.",
+    relatedConcepts: ["cdn", "database", "nosql", "denormalization"],
+    sources: [
+      { label: "AWS — Amazon S3 (object storage)", url: "https://docs.aws.amazon.com/AmazonS3/latest/userguide/Welcome.html" },
+      { label: "Google Cloud — Storage classes", url: "https://cloud.google.com/storage/docs/storage-classes" },
+      { label: "Cloudflare — Object storage vs block vs file", url: "https://www.cloudflare.com/learning/cloud/what-is-object-storage/" },
+    ],
   },
 
   // ───────────────────────────────────────── NoSQL
@@ -1805,6 +1935,16 @@ const INFRA_CONCEPTS: Concept[] = [
     ],
     scaling:
       "NoSQL is built to scale out — but you pay by modelling data per query and accepting eventual consistency. Pick the family that matches how you actually read your data.",
+    whenToUse:
+      "When your access pattern is known and simple, scale or write throughput exceeds what one relational primary can handle, or the data is naturally document/graph/wide-column shaped. Pick the family (KV, document, wide-column, graph) that matches how you read.",
+    whenNotToUse:
+      "When you need rich ad-hoc queries, multi-row transactions, or joins across entities — relational databases do these far better. 'NoSQL because it scales' without a known access pattern usually trades flexibility you'll miss for scale you don't yet need.",
+    relatedConcepts: ["database", "denormalization", "sharding", "consistent-hashing", "cap-theorem"],
+    sources: [
+      { label: "AWS — DynamoDB developer guide", url: "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html" },
+      { label: "MongoDB — Data modeling introduction", url: "https://www.mongodb.com/docs/manual/core/data-modeling-introduction/" },
+      { label: "Martin Kleppmann — DDIA (data models & query languages)", url: "https://dataintensive.net/" },
+    ],
     internal: {
       summary: "Choosing a NoSQL store starts from your access pattern — the data's shape points to a family.",
       nodes: [
