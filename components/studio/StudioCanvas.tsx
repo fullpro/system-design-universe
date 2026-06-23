@@ -11,12 +11,14 @@ import {
   type OnNodesChange,
   type OnEdgesChange,
   type OnConnect,
+  type EdgeMouseHandler,
 } from "@xyflow/react";
 
 import { ConceptNode } from "../nodes/ConceptNode";
+import { CustomNode } from "../nodes/CustomNode";
 import { FlowEdge } from "../edges/FlowEdge";
 
-const nodeTypes = { concept: ConceptNode };
+const nodeTypes = { concept: ConceptNode, custom: CustomNode };
 const edgeTypes = { flow: FlowEdge };
 
 interface Props {
@@ -25,9 +27,10 @@ interface Props {
   onNodesChange: OnNodesChange;
   onEdgesChange: OnEdgesChange;
   onConnect: OnConnect;
+  onEdgeClick?: EdgeMouseHandler;
 }
 
-export function StudioCanvas({ nodes, edges, onNodesChange, onEdgesChange, onConnect }: Props) {
+export function StudioCanvas({ nodes, edges, onNodesChange, onEdgesChange, onConnect, onEdgeClick }: Props) {
   return (
     <ReactFlow
       nodes={nodes}
@@ -35,6 +38,7 @@ export function StudioCanvas({ nodes, edges, onNodesChange, onEdgesChange, onCon
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onConnect={onConnect}
+      onEdgeClick={onEdgeClick}
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
       connectionMode={ConnectionMode.Loose}

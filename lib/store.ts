@@ -98,7 +98,10 @@ interface UniverseState {
 
   setTrafficTier: (tier: number) => void;
   toggleSolution: (id: string) => void;
+  setEnabledSolutions: (ids: string[]) => void;
   resetSimulator: () => void;
+  /** Jump from Build into Simulate, pre-configured from the user's design. */
+  stressTestDesign: (solutions: string[], tier?: number) => void;
 
   setEvolutionStage: (stage: number) => void;
   nextEvolution: () => void;
@@ -246,7 +249,10 @@ export const useUniverse = create<UniverseState>((set) => ({
         ? s.enabledSolutions.filter((x) => x !== id)
         : [...s.enabledSolutions, id],
     })),
+  setEnabledSolutions: (ids) => set({ enabledSolutions: [...new Set(ids)] }),
   resetSimulator: () => set({ trafficTier: 0, enabledSolutions: [] }),
+  stressTestDesign: (solutions, tier = 3) =>
+    set({ mode: "simulator", enabledSolutions: [...new Set(solutions)], trafficTier: clamp(tier, 0, SIM_TIERS.length - 1), selectedConceptId: null }),
 
   setEvolutionStage: (stage) =>
     set({ evolutionStage: clamp(stage, 0, EVOLUTION_STAGES.length - 1), evoChallenge: null }),

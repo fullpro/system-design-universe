@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { Trash2, Sparkles, Plus } from "lucide-react";
 import { BUILDABLE } from "@/lib/studio";
+import { CUSTOM_KINDS, KIND_META, type NodeKind } from "@/lib/studioTypes";
 import { getConcept } from "@/lib/concepts";
 import { CATEGORIES, CATEGORY_ORDER } from "@/lib/categories";
 import { rgba } from "@/lib/color";
@@ -10,14 +11,14 @@ import type { CategoryId, Concept } from "@/lib/types";
 import { Icon } from "@/components/ui/Icon";
 
 interface Props {
-  present: Set<string>;
   count: number;
   onAdd: (conceptId: string) => void;
+  onAddCustom: (kind: NodeKind) => void;
   onClear: () => void;
   onExample: () => void;
 }
 
-export function StudioPalette({ present, count, onAdd, onClear, onExample }: Props) {
+export function StudioPalette({ count, onAdd, onAddCustom, onClear, onExample }: Props) {
   const grouped = useMemo(() => {
     const map = new Map<CategoryId, Concept[]>();
     for (const id of BUILDABLE) {
@@ -46,6 +47,36 @@ export function StudioPalette({ present, count, onAdd, onClear, onExample }: Pro
       </div>
 
       <div className="scroll-fade min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+        {/* Custom typed nodes — build anything; double-click to rename. */}
+        <div className="mb-3">
+          <div className="mb-1 flex items-center gap-1.5 px-1.5">
+            <span className="h-1.5 w-1.5 rounded-full" style={{ background: "#a5b4fc" }} />
+            <span className="text-[9.5px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-faint)" }}>Custom · build anything</span>
+          </div>
+          <div className="grid grid-cols-2 gap-1">
+            {CUSTOM_KINDS.map((kind) => {
+              const m = KIND_META[kind];
+              return (
+                <button
+                  key={kind}
+                  onClick={() => onAddCustom(kind)}
+                  title={m.hint}
+                  className="group flex items-center gap-1.5 rounded-lg px-1.5 py-1.5 text-left transition-colors hover:bg-white/5"
+                  style={{ border: `1px solid ${rgba(m.accent, 0.18)}` }}
+                >
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md" style={{ background: rgba(m.accent, 0.14), color: m.accent }}>
+                    <Icon name={m.icon} size={11} strokeWidth={1.8} />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[10.5px] font-medium" style={{ color: "var(--text-dim)" }}>{m.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="mb-1 px-1.5 text-[9.5px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-faint)" }}>
+          Known components
+        </div>
         {grouped.map(({ cat, items }) => {
           const c = CATEGORIES[cat];
           return (
@@ -57,7 +88,6 @@ export function StudioPalette({ present, count, onAdd, onClear, onExample }: Pro
               <div className="space-y-1">
                 {items.map((concept) => {
                   const accent = CATEGORIES[concept.category].accent;
-                  const used = present.has(concept.id);
                   return (
                     <button
                       key={concept.id}
@@ -69,7 +99,6 @@ export function StudioPalette({ present, count, onAdd, onClear, onExample }: Pro
                         <Icon name={concept.icon} size={13} strokeWidth={1.8} />
                       </span>
                       <span className="min-w-0 flex-1 truncate text-[12px] font-medium" style={{ color: "var(--text)" }}>{concept.name}</span>
-                      {used && <span className="text-[9px] font-bold tabular-nums" style={{ color: rgba(accent, 0.9) }}>●</span>}
                       <Plus size={12} className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100" style={{ color: "var(--text-faint)" }} />
                     </button>
                   );
