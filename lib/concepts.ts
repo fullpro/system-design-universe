@@ -54,6 +54,16 @@ const INFRA_CONCEPTS: Concept[] = [
     ],
     scaling:
       "Clients scale themselves — every user brings their own device. The challenge is the fan-in: millions of independent clients converging on shared infrastructure.",
+    whenToUse:
+      "Every system has a client — the question is how thick. Use a rich client (SPA, native app) when you need offline capability, rich interactivity, or push updates. Use a thin client (server-rendered HTML) when you want fast first paint, SEO, and minimal JS.",
+    whenNotToUse:
+      "Don't put business logic, secrets, or trust boundaries in the client — it runs on hardware you don't control. Never treat client-side validation as a security gate; always re-validate server-side.",
+    relatedConcepts: ["cdn", "dns", "load-balancer", "http", "web-server"],
+    sources: [
+      { label: "web.dev — Performance", url: "https://web.dev/performance/" },
+      { label: "MDN — Progressive Web Apps", url: "https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps" },
+      { label: "Google — RAIL performance model", url: "https://web.dev/rail/" },
+    ],
   },
 
   // ───────────────────────────────────────── DNS
@@ -539,6 +549,16 @@ const INFRA_CONCEPTS: Concept[] = [
     ],
     scaling:
       "Add read replicas and cache layers horizontally. Because reads are stateless and tolerate staleness, you can scale them almost linearly — the write master is never the bottleneck for reads.",
+    whenToUse:
+      "When reads vastly outnumber writes (the common case — 10–100×) and you can tolerate slight staleness. Splitting the read path lets you cache aggressively and add replicas without touching the write master.",
+    whenNotToUse:
+      "When reads must always reflect the latest write (e.g. 'did my payment go through?') — read-your-writes consistency adds complexity. Also overkill for low-traffic systems where a single API handles both paths fine.",
+    relatedConcepts: ["write-api", "cache", "read-replica", "cqrs", "database"],
+    sources: [
+      { label: "Microsoft — CQRS pattern", url: "https://learn.microsoft.com/en-us/azure/architecture/patterns/cqrs" },
+      { label: "AWS — Read replicas", url: "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_ReadRepl.html" },
+      { label: "Martin Fowler — CQRS", url: "https://martinfowler.com/bliki/CQRS.html" },
+    ],
   },
 
   // ───────────────────────────────────────── Write API
@@ -586,6 +606,16 @@ const INFRA_CONCEPTS: Concept[] = [
     ],
     scaling:
       "Vertical scale the write master as far as it goes, then shard by key. Rate-limit writes to protect the primary. Move non-critical side effects (emails, analytics) to the async path.",
+    whenToUse:
+      "When the caller needs immediate confirmation that the mutation succeeded — payments, account creation, inventory reservation. The synchronous receipt is the point.",
+    whenNotToUse:
+      "When the caller doesn't need an instant result — email sends, thumbnail generation, analytics events. These should go through the async write path for better throughput and resilience.",
+    relatedConcepts: ["read-api", "write-api-async", "database", "cqrs", "message-queue"],
+    sources: [
+      { label: "Microsoft — CQRS pattern", url: "https://learn.microsoft.com/en-us/azure/architecture/patterns/cqrs" },
+      { label: "Stripe — Idempotent requests", url: "https://stripe.com/docs/api/idempotent_requests" },
+      { label: "Martin Fowler — CQRS", url: "https://martinfowler.com/bliki/CQRS.html" },
+    ],
   },
 
   // ───────────────────────────────────────── Write API Async
@@ -633,6 +663,16 @@ const INFRA_CONCEPTS: Concept[] = [
     ],
     scaling:
       "Add more workers to drain the queue faster. The queue itself scales by partitioning. Because workers are stateless consumers, horizontal scaling is straightforward — just add instances.",
+    whenToUse:
+      "When the caller doesn't need the result now — file processing, notifications, analytics ingestion, anything where 'accepted' is a good enough immediate answer. Also when you need to absorb traffic spikes without scaling the write master.",
+    whenNotToUse:
+      "When the caller blocks on the outcome (payment confirmation, username uniqueness check). If the user is staring at a spinner waiting for the result, async adds complexity without benefit — use the synchronous write API.",
+    relatedConcepts: ["write-api", "message-queue", "worker-service", "back-pressure", "task-queue"],
+    sources: [
+      { label: "AWS — Asynchronous messaging patterns", url: "https://docs.aws.amazon.com/prescriptive-guidance/latest/modernization-integrating-microservices/async-messaging.html" },
+      { label: "Microsoft — Async request-reply pattern", url: "https://learn.microsoft.com/en-us/azure/architecture/patterns/async-request-reply" },
+      { label: "Confluent — Event-driven architecture", url: "https://developer.confluent.io/courses/event-driven-architecture/overview/" },
+    ],
   },
 
   // ───────────────────────────────────────── Worker Service
@@ -680,6 +720,16 @@ const INFRA_CONCEPTS: Concept[] = [
     ],
     scaling:
       "Horizontal: spin up more worker instances. The queue is the backpressure signal — monitor depth and scale workers to keep it near zero. Use separate pools for different job priorities.",
+    whenToUse:
+      "Whenever work can be done outside the request path — background jobs, ETL, image processing, sending emails. Workers decouple acceptance speed from processing speed.",
+    whenNotToUse:
+      "For request-response work where the user is waiting for the result. Workers are throughput-optimised, not latency-optimised — if sub-second response matters, keep it in the API tier.",
+    relatedConcepts: ["write-api-async", "message-queue", "task-queue", "back-pressure", "kubernetes"],
+    sources: [
+      { label: "AWS — Worker environments", url: "https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/using-features-managing-env-tiers.html" },
+      { label: "Sidekiq — Best practices", url: "https://github.com/sidekiq/sidekiq/wiki/Best-Practices" },
+      { label: "Celery — Introduction", url: "https://docs.celeryq.dev/en/stable/getting-started/introduction.html" },
+    ],
   },
 
   // ───────────────────────────────────────── Cache (Redis)
@@ -990,6 +1040,16 @@ const INFRA_CONCEPTS: Concept[] = [
     ],
     scaling:
       "Warehouses scale by separating storage from compute — spin up more compute for big queries without touching storage. Streaming pipelines (Kafka → warehouse) shrink the freshness gap when minutes-old data isn't good enough.",
+    whenToUse:
+      "When you need to answer historical or aggregate questions (revenue by region, user cohort trends) that would cripple your transactional database. Any workload that scans millions of rows belongs in a warehouse, not in prod.",
+    whenNotToUse:
+      "For low-latency, per-request lookups — warehouses are optimised for scan throughput, not single-key speed. Also overkill when your dataset fits comfortably in the transactional DB and queries run fine there.",
+    relatedConcepts: ["database", "message-queue", "worker-service", "observability"],
+    sources: [
+      { label: "Google Cloud — What is a data warehouse?", url: "https://cloud.google.com/learn/what-is-a-data-warehouse" },
+      { label: "AWS — Modern data architecture", url: "https://aws.amazon.com/big-data/datalakes-and-analytics/modern-data-architecture/" },
+      { label: "Snowflake — Architecture overview", url: "https://docs.snowflake.com/en/user-guide/intro-key-concepts" },
+    ],
   },
 
   // ───────────────────────────────────────── Read Replicas
@@ -1172,6 +1232,16 @@ const INFRA_CONCEPTS: Concept[] = [
     ],
     scaling:
       "At scale the counter itself must scale — usually a shared Redis with atomic operations, or approximate local limits per node. The classic tradeoff is accuracy vs. coordination cost.",
+    whenToUse:
+      "At any public API boundary — especially authentication endpoints, paid-tier quotas, and anywhere a retry storm or scraper can generate unbounded load. Also useful internally between services to prevent cascade overload.",
+    whenNotToUse:
+      "On internal paths where callers are trusted and backpressure is already handled by the queue or circuit breaker. Over-limiting internal traffic adds latency and false rejections that hurt more than they help.",
+    relatedConcepts: ["api-gateway", "reverse-proxy", "back-pressure", "circuit-breaker", "load-balancer"],
+    sources: [
+      { label: "Cloudflare — What is rate limiting?", url: "https://www.cloudflare.com/learning/bots/what-is-rate-limiting/" },
+      { label: "Stripe — Rate limiting strategies", url: "https://stripe.com/blog/rate-limiters" },
+      { label: "RFC 6585 — 429 Too Many Requests", url: "https://datatracker.ietf.org/doc/html/rfc6585#section-4" },
+    ],
   },
 
   // ───────────────────────────────────────── Circuit Breaker
@@ -1297,6 +1367,16 @@ const INFRA_CONCEPTS: Concept[] = [
     ],
     scaling:
       "Horizontal: put the web server behind a load balancer to handle more concurrent connections. It's stateless, so each instance is identical. The load balancer scales it; the web server scales the backends through routing.",
+    whenToUse:
+      "When you want a single stable entry point that abstracts the backend's specialised API tiers — especially in CQRS architectures where reads, writes, and async work go to different services.",
+    whenNotToUse:
+      "When an API gateway already handles routing, auth, and rate limiting — adding a separate web-server layer becomes a redundant hop. At small scale, a single API process that handles everything is simpler.",
+    relatedConcepts: ["load-balancer", "api-gateway", "reverse-proxy", "read-api", "write-api"],
+    sources: [
+      { label: "NGINX — What is a web server?", url: "https://www.nginx.com/resources/glossary/web-server/" },
+      { label: "Cloudflare — Web server", url: "https://www.cloudflare.com/learning/ddos/glossary/web-server/" },
+      { label: "MDN — What is a web server?", url: "https://developer.mozilla.org/en-US/docs/Learn/Common_questions/Web_mechanics/What_is_a_web_server" },
+    ],
   },
 
   // ───────────────────────────────────────── Reverse Proxy
@@ -1405,6 +1485,16 @@ const INFRA_CONCEPTS: Concept[] = [
     ],
     scaling:
       "Kubernetes scales workloads (horizontal pod autoscaling) and the cluster itself (node autoscaling). It shines when you have many services; for a handful, its complexity often outweighs the benefit.",
+    whenToUse:
+      "When you run many containerised services across multiple machines and need automated scheduling, scaling, self-healing, and service discovery. The break-even point is typically 5–10+ services where manual orchestration becomes untenable.",
+    whenNotToUse:
+      "For a monolith, a few services, or a solo developer — the operational tax (networking, RBAC, YAML, upgrade cycles) outweighs the benefit. Consider managed PaaS (Vercel, Fly, Railway) or simpler orchestrators (ECS, Nomad) first.",
+    relatedConcepts: ["services", "load-balancer", "observability", "federation", "worker-service"],
+    sources: [
+      { label: "Kubernetes — Concepts overview", url: "https://kubernetes.io/docs/concepts/overview/" },
+      { label: "Google Cloud — Kubernetes best practices", url: "https://cloud.google.com/kubernetes-engine/docs/best-practices" },
+      { label: "CNCF — Kubernetes documentation", url: "https://kubernetes.io/docs/home/" },
+    ],
   },
 
   // ───────────────────────────────────────── Observability
@@ -1571,6 +1661,16 @@ const INFRA_CONCEPTS: Concept[] = [
     ],
     scaling:
       "Connection setup is expensive at scale, so pool and reuse connections, keep them alive, and terminate TLS at the edge to avoid re-handshaking on every request.",
+    whenToUse:
+      "For any communication that needs reliable, ordered delivery — HTTP, database wire protocols, SSH, SMTP. TCP is the default transport for almost everything on the internet because correctness matters more than speed for most applications.",
+    whenNotToUse:
+      "When latency matters more than perfect delivery — real-time video/voice (dropped frames are better than delayed ones), DNS lookups (one small packet, easy to retry), and game state updates where the latest value overwrites the old. Use UDP or QUIC instead.",
+    relatedConcepts: ["udp", "http", "dns", "load-balancer", "back-pressure"],
+    sources: [
+      { label: "RFC 9293 — TCP specification", url: "https://datatracker.ietf.org/doc/html/rfc9293" },
+      { label: "Cloudflare — What is TCP?", url: "https://www.cloudflare.com/learning/ddos/glossary/tcp-ip/" },
+      { label: "Beej's Guide to Network Programming", url: "https://beej.us/guide/bgnet/" },
+    ],
     internal: {
       summary: "TCP opens a connection with a three-way handshake, establishing sequence numbers before any data flows.",
       nodes: [

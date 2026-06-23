@@ -50,6 +50,16 @@ export const FOUNDATIONS: Concept[] = [
     ],
     scaling:
       "CAP is the decision that shapes everything downstream: choosing AP buys availability at internet scale, while choosing CP buys correctness for money and inventory.",
+    whenToUse:
+      "As the first framing question when choosing a distributed datastore or designing replication: 'during a partition, does this use case need consistency (CP) or availability (AP)?' It clarifies which guarantee you're willing to sacrifice.",
+    whenNotToUse:
+      "Don't apply CAP to single-node systems (no partitions, no tradeoff). Don't use CAP alone — it says nothing about latency during normal operation. Reach for PACELC when you also need to reason about the latency-consistency tradeoff in the no-partition case.",
+    relatedConcepts: ["consistency-models", "acid", "base", "database", "nosql"],
+    sources: [
+      { label: "Brewer — CAP Twelve Years Later", url: "https://www.infoq.com/articles/cap-twelve-years-later-how-the-rules-have-changed/" },
+      { label: "Martin Kleppmann — Please stop calling databases CP or AP", url: "https://martin.kleppmann.com/2015/05/11/please-stop-calling-databases-cp-or-ap.html" },
+      { label: "Gilbert & Lynch — Brewer's conjecture (formal proof)", url: "https://users.ece.cmu.edu/~adrian/731-sp04/readings/GL-cap.pdf" },
+    ],
   },
   {
     id: "consistency-models",
@@ -94,6 +104,16 @@ export const FOUNDATIONS: Concept[] = [
     ],
     scaling:
       "Internet-scale systems mostly pick eventual consistency to stay available and fast, reserving strong consistency for the few operations that genuinely require it.",
+    whenToUse:
+      "When choosing replication strategy: pick the weakest model your use case can tolerate — eventual for counters and feeds, read-your-writes for user-facing mutations, linearizable for money and inventory. Weaker = faster and more available.",
+    whenNotToUse:
+      "Don't default to strong consistency everywhere — the coordination cost kills latency and availability at scale. Conversely, don't use eventual consistency for financial balances or anything where a stale read causes real harm.",
+    relatedConcepts: ["cap-theorem", "database", "read-replica", "acid", "base"],
+    sources: [
+      { label: "Jepsen — Consistency models", url: "https://jepsen.io/consistency" },
+      { label: "AWS — Consistency models in DynamoDB", url: "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadConsistency.html" },
+      { label: "Martin Kleppmann — Designing Data-Intensive Applications (Ch. 9)", url: "https://dataintensive.net/" },
+    ],
   },
   {
     id: "acid",
@@ -138,6 +158,16 @@ export const FOUNDATIONS: Concept[] = [
     ],
     scaling:
       "ACID is why a single relational primary is the hardest tier to scale — distributed ACID (Spanner, CockroachDB) exists but pays for it in latency and operational complexity.",
+    whenToUse:
+      "For any operation where partial application would be catastrophic — financial transfers, inventory decrements, booking systems. ACID transactions are the correct default for relational data until you have evidence they're the bottleneck.",
+    whenNotToUse:
+      "For high-throughput, eventually-consistent workloads (event streams, analytics ingestion, activity feeds) where the coordination overhead of transactions kills performance and availability. Consider BASE or saga patterns instead.",
+    relatedConcepts: ["base", "cap-theorem", "database", "consistency-models", "sharding"],
+    sources: [
+      { label: "PostgreSQL — Transaction isolation", url: "https://www.postgresql.org/docs/current/transaction-iso.html" },
+      { label: "Jepsen — Consistency models", url: "https://jepsen.io/consistency" },
+      { label: "Jim Gray — The Transaction Concept", url: "https://jimgray.azurewebsites.net/papers/theTransactionConcept.pdf" },
+    ],
   },
   {
     id: "base",
@@ -182,6 +212,16 @@ export const FOUNDATIONS: Concept[] = [
     ],
     scaling:
       "BASE is the philosophy that makes massive distributed datastores possible — availability and scale first, with consistency treated as a convergence process.",
+    whenToUse:
+      "When availability and horizontal write throughput matter more than immediate consistency — social feeds, shopping carts, activity streams, IoT telemetry. Any workload where 'always accept the write, reconcile later' is acceptable.",
+    whenNotToUse:
+      "For operations requiring strict correctness — financial transfers, inventory where overselling is costly, anything governed by a regulatory ledger. Use ACID transactions for these, even if it limits scale.",
+    relatedConcepts: ["acid", "cap-theorem", "nosql", "consistency-models", "database"],
+    sources: [
+      { label: "Werner Vogels — Eventually Consistent", url: "https://www.allthingsdistributed.com/2008/12/eventually_consistent.html" },
+      { label: "AWS — DynamoDB consistency", url: "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadConsistency.html" },
+      { label: "Dan Pritchett — BASE: An ACID Alternative", url: "https://dl.acm.org/doi/10.1145/1394127.1394128" },
+    ],
   },
   {
     id: "scaling-types",
@@ -226,6 +266,16 @@ export const FOUNDATIONS: Concept[] = [
     ],
     scaling:
       "This whole app teaches it: keep the app tier stateless so it scales out freely, and push state into systems (cache, DB) that are designed to be scaled deliberately.",
+    whenToUse:
+      "Scale up first — it's simpler, requires no code changes, and buys time. Scale out when you hit the single-machine ceiling or need fault tolerance that one box can't provide. Most teams switch to horizontal scaling for stateless tiers early and keep the database vertical as long as possible.",
+    whenNotToUse:
+      "Don't scale out prematurely — distributed-systems complexity (consensus, partitioning, network failures) is real cost. If a bigger instance solves the problem for the next year, scale up.",
+    relatedConcepts: ["load-balancer", "sharding", "read-replica", "kubernetes", "availability-nines"],
+    sources: [
+      { label: "AWS — Scalability concepts", url: "https://docs.aws.amazon.com/whitepapers/latest/web-application-hosting-best-practices/scalability.html" },
+      { label: "Martin Fowler — Scalability", url: "https://martinfowler.com/bliki/Scalability.html" },
+      { label: "Google SRE — Handling overload", url: "https://sre.google/sre-book/handling-overload/" },
+    ],
   },
   {
     id: "latency-vs-throughput",
@@ -269,6 +319,16 @@ export const FOUNDATIONS: Concept[] = [
     ],
     scaling:
       "Scaling out usually raises throughput; cutting latency needs caching, proximity (CDN/edge) and fewer round trips. Always measure the tail (p99), never just the mean.",
+    whenToUse:
+      "As the first question when setting performance targets: 'is the user waiting for one response (latency) or are we processing a firehose (throughput)?' Name the real goal before you optimise, because techniques for one can hurt the other.",
+    whenNotToUse:
+      "Don't conflate the two — batching raises throughput but adds latency; pipelining helps throughput but not individual request time. If someone says 'make it faster', clarify which dimension before reaching for a tool.",
+    relatedConcepts: ["cache", "cdn", "load-balancer", "availability-nines", "back-pressure"],
+    sources: [
+      { label: "Google SRE — Monitoring distributed systems", url: "https://sre.google/sre-book/monitoring-distributed-systems/" },
+      { label: "Gil Tene — How NOT to measure latency", url: "https://www.youtube.com/watch?v=lJ8ydIuPFeU" },
+      { label: "AWS — Performance pillar", url: "https://docs.aws.amazon.com/wellarchitected/latest/performance-efficiency-pillar/welcome.html" },
+    ],
   },
   {
     id: "availability-nines",
@@ -313,5 +373,15 @@ export const FOUNDATIONS: Concept[] = [
     ],
     scaling:
       "More nines come from removing single points of failure — redundancy, failover, multi-region — but every nine multiplies cost, so target the SLO your users actually need.",
+    whenToUse:
+      "When setting an SLO — translate the business impact of downtime into a concrete nines target, then engineer to that budget. Define error budgets early; they drive decisions about deploys, testing, and redundancy investment.",
+    whenNotToUse:
+      "Don't chase five nines when three nines are sufficient for your users — each additional nine costs ~10× more in redundancy, operational effort, and deployment constraints. Over-engineering availability wastes money and slows feature velocity.",
+    relatedConcepts: ["failover", "load-balancer", "observability", "scaling-types", "cap-theorem"],
+    sources: [
+      { label: "Google SRE — Embracing risk", url: "https://sre.google/sre-book/embracing-risk/" },
+      { label: "Google SRE — Service Level Objectives", url: "https://sre.google/sre-book/service-level-objectives/" },
+      { label: "AWS — Availability concepts", url: "https://docs.aws.amazon.com/whitepapers/latest/availability-and-beyond-improving-resilience/availability.html" },
+    ],
   },
 ];
