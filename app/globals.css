@@ -11,8 +11,9 @@
   --border: rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.16);
   --text: #e8eaf2;
-  --text-dim: #99a1b7;
-  --text-faint: #5a6379;
+  --text-dim: #a2aac0;
+  /* Lifted from #5a6379 for AA-legible small text on the dark panels. */
+  --text-faint: #757e95;
   --brand: #6366f1;
   --good: #34d399;
   --warn: #fbbf24;
@@ -176,6 +177,19 @@ body {
     inset 0 1px 0 0 rgba(255, 255, 255, 0.06),
     0 10px 40px -12px rgba(0, 0, 0, 0.7);
 }
+/* Keyboard focus ring — visible only for keyboard users, never on mouse click. */
+.concept-node:focus {
+  outline: none;
+}
+.concept-node:focus-visible {
+  outline: 2px solid #c7d2fe;
+  outline-offset: 3px;
+}
+/* Global focus-visible for interactive controls. */
+:focus-visible {
+  outline: 2px solid #a5b4fc;
+  outline-offset: 2px;
+}
 .concept-node:hover {
   box-shadow:
     0 0 24px -4px var(--node-glow),
@@ -183,12 +197,13 @@ body {
     0 14px 44px -12px rgba(0, 0, 0, 0.7);
 }
 
-/* Micro-diagram ambient breathing */
+/* Micro-diagram ambient breathing — kept subtle so it doesn't compete for
+   attention with the element the user is actually focused on. */
 .micro-diagram svg {
-  animation: diagram-breathe 4s ease-in-out infinite;
+  animation: diagram-breathe 6s ease-in-out infinite;
 }
 @keyframes diagram-breathe {
-  0%, 100% { opacity: 0.82; }
+  0%, 100% { opacity: 0.92; }
   50% { opacity: 1; }
 }
 
@@ -245,6 +260,36 @@ body {
 /* Safe-area bottom padding for phones with gesture bars */
 .safe-bottom {
   padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
+}
+
+/* ───────────────────────────── Reduced motion ───────────────────────────── */
+/* Honour the OS "reduce motion" setting: still all ambient/looping animation and
+   collapse long transitions, while keeping layout instantaneous and usable. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .flow-dash {
+    animation: none !important;
+    stroke-dasharray: 6 8;
+  }
+  .pulse-ring {
+    animation: none !important;
+    opacity: 0 !important;
+  }
+  .micro-diagram svg {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+  /* React Flow animated edges stop their marching ants. */
+  .react-flow__edge-path {
+    animation: none !important;
+  }
 }
 
 /* Range slider (traffic dial). */

@@ -117,9 +117,10 @@ export function Studio() {
   const [mobilePanel, setMobilePanel] = useState<"palette" | "analysis" | null>(null);
 
   return (
-    <div className="absolute inset-x-2 bottom-2 top-[56px] z-10 flex flex-col gap-2 sm:inset-x-3 sm:bottom-3 sm:top-[64px] sm:flex-row sm:gap-3">
-      {/* Desktop palette */}
-      <div className="hidden sm:block">
+    <div className="absolute inset-x-2 bottom-2 top-[56px] z-10 flex flex-col gap-2 sm:inset-x-3 sm:bottom-3 sm:top-[64px] lg:flex-row lg:gap-3">
+      {/* Side palette — only at wide (lg) widths; tablets get the canvas-first
+          layout with collapsible sheets, so the drawing area is never starved. */}
+      <div className="hidden lg:block">
         <StudioPalette present={present} count={nodes.length} onAdd={addComponent} onClear={clear} onExample={loadExample} />
       </div>
 
@@ -132,15 +133,15 @@ export function Studio() {
             <div className="pointer-events-none text-center">
               <div className="text-[14px] font-semibold sm:text-[15px]" style={{ color: "var(--text-dim)" }}>Design your own system</div>
               <div className="mt-1 text-[11.5px] sm:text-[12.5px]" style={{ color: "var(--text-faint)" }}>
-                <span className="sm:hidden">Add components or load an example below</span>
-                <span className="hidden sm:inline">Add components from the left · drag to arrange · wire them together · get a live review</span>
+                <span className="lg:hidden">Tap Components below to add · drag to arrange · wire them together</span>
+                <span className="hidden lg:inline">Add components from the left · drag to arrange · wire them together · get a live review</span>
               </div>
             </div>
           </div>
         )}
 
-        {/* Mobile floating toolbar */}
-        <div className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 gap-2 sm:hidden">
+        {/* Floating toolbar (mobile + tablet) */}
+        <div className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 gap-2 lg:hidden">
           <button
             onClick={() => setMobilePanel(mobilePanel === "palette" ? null : "palette")}
             className="glass sheen flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[12px] font-semibold"
@@ -160,12 +161,12 @@ export function Studio() {
         </div>
       </div>
 
-      {/* Desktop analysis */}
-      <div className="hidden sm:block">
+      {/* Side analysis — wide widths only. */}
+      <div className="hidden lg:block">
         <StudioAnalysis analysis={analysis} />
       </div>
 
-      {/* Mobile bottom sheet for palette / analysis */}
+      {/* Bottom sheet for palette / analysis (mobile + tablet) */}
       <AnimatePresence>
         {mobilePanel && (
           <motion.div
@@ -174,7 +175,7 @@ export function Studio() {
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
             transition={{ type: "spring", stiffness: 300, damping: 32 }}
-            className="glass sheen absolute inset-x-2 bottom-2 z-30 max-h-[55vh] overflow-hidden rounded-2xl sm:hidden"
+            className="glass sheen absolute inset-x-2 bottom-2 z-30 mx-auto max-h-[55vh] max-w-[460px] overflow-hidden rounded-2xl lg:hidden"
           >
             <div className="flex items-center justify-between px-3.5 pb-1 pt-3">
               <span className="text-[12px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-dim)" }}>

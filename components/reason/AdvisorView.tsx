@@ -6,7 +6,7 @@ import { ArrowRight, Sparkles, ShieldCheck } from "lucide-react";
 import { useUniverse } from "@/lib/store";
 import { runAdvisor, type Recommendation } from "@/lib/reasoning/advisor";
 import { REQUIREMENT_PRESETS, compact } from "@/lib/reasoning/requirements";
-import { overallScore } from "@/lib/reasoning/axes";
+import { AXES, AXIS_ORDER } from "@/lib/reasoning/axes";
 import { getConcept } from "@/lib/concepts";
 import { CATEGORIES } from "@/lib/categories";
 import { rgba } from "@/lib/color";
@@ -82,7 +82,11 @@ export function AdvisorView() {
   const result = useMemo(() => runAdvisor(requirements), [requirements]);
   const spine = result.recommendations.filter((r) => !r.crossCutting);
   const crossCutting = result.recommendations.filter((r) => r.crossCutting);
-  const overall = overallScore(result.scores);
+  // What the user's constraints weight most heavily — shown as the "why this fit".
+  const drivers = AXIS_ORDER.filter((a) => (result.weights[a] ?? 1) >= 2)
+    .sort((a, b) => (result.weights[b] ?? 1) - (result.weights[a] ?? 1))
+    .map((a) => AXES[a].short);
+  const fitColor = result.fit >= 75 ? "var(--good)" : result.fit >= 55 ? "#a5b4fc" : "var(--warn)";
 
   return (
     <div className="mx-auto grid max-w-[1180px] grid-cols-1 gap-4 px-3 py-4 sm:gap-6 sm:px-5 sm:py-6 lg:grid-cols-[340px_1fr]">
@@ -144,11 +148,22 @@ export function AdvisorView() {
               <span className="text-[13px] font-bold" style={{ color: "var(--text)" }}>Recommended architecture</span>
             </div>
             <p className="mt-1.5 text-[12.5px] leading-snug" style={{ color: "var(--text-dim)" }}>{result.summary}</p>
+            <p className="mt-1.5 text-[10.5px] leading-snug" style={{ color: "var(--text-faint)" }}>
+              Rule-based, no AI · scores are illustrative tradeoff weights, not benchmarks.
+            </p>
           </div>
           <div className="flex shrink-0 items-center gap-4">
-            <div className="text-center">
-              <div className="text-3xl font-bold tabular-nums" style={{ color: "#a5b4fc" }}>{overall}</div>
-              <div className="text-[10px] uppercase tracking-wide" style={{ color: "var(--text-faint)" }}>overall</div>
+            <div
+              className="text-center"
+              title="A weighted score: how well this design serves the constraints you set, rather than a flat average of opposing concerns."
+            >
+              <div className="text-3xl font-bold tabular-nums" style={{ color: fitColor }}>{result.fit}</div>
+              <div className="text-[10px] uppercase tracking-wide" style={{ color: "var(--text-faint)" }}>fit</div>
+              {drivers.length > 0 && (
+                <div className="mt-0.5 text-[9px] leading-tight" style={{ color: "var(--text-faint)" }}>
+                  weighted for<br />{drivers.join(" · ")}
+                </div>
+              )}
             </div>
             <Radar scores={result.scores} size={180} />
           </div>

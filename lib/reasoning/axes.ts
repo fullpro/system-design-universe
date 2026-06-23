@@ -64,3 +64,23 @@ export function overallScore(s: AxisScores): number {
   const sum = AXIS_ORDER.reduce((acc, a) => acc + s[a], 0);
   return Math.round(sum / AXIS_ORDER.length);
 }
+
+export type AxisWeights = Partial<Record<AxisId, number>>;
+
+/**
+ * "Fit to your constraints" — a weighted mean of the axes, where the weights
+ * encode what the user actually asked for. Unlike a flat mean, this does NOT
+ * punish a design for trading away simplicity/cost when the user never asked to
+ * optimise them — so a sound architecture reads as a good *fit*, not a mediocre
+ * average of opposing concerns.
+ */
+export function weightedFit(s: AxisScores, weights: AxisWeights): number {
+  let wsum = 0;
+  let acc = 0;
+  for (const a of AXIS_ORDER) {
+    const w = weights[a] ?? 1;
+    wsum += w;
+    acc += w * s[a];
+  }
+  return wsum === 0 ? 0 : clampScore(acc / wsum);
+}

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   X,
@@ -15,31 +16,65 @@ import {
   Brain,
   Ghost,
   Unplug,
+  ChevronDown,
+  Dumbbell,
 } from "lucide-react";
 import { useUniverse } from "@/lib/store";
 import { getConcept } from "@/lib/concepts";
 import { CATEGORIES } from "@/lib/categories";
 import { rgba } from "@/lib/color";
 import { Icon } from "@/components/ui/Icon";
+import { quizForConcept } from "@/lib/quiz";
+import { QuizCard } from "@/components/learn/Quiz";
 
+/** A collapsible lesson section. `defaultOpen` is driven by lesson density so
+ *  beginners see a short lesson and can expand on demand, while "deep" shows all. */
 function Section({
   title,
   icon,
   accent,
+  defaultOpen = true,
   children,
 }: {
   title: string;
   icon: React.ReactNode;
   accent: string;
+  defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
+  // When the density preference flips defaultOpen, re-sync the section.
+  useEffect(() => setOpen(defaultOpen), [defaultOpen]);
   return (
-    <section className="px-5 py-4" style={{ borderTop: "1px solid var(--border)" }}>
-      <h3 className="mb-2.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider" style={{ color: rgba(accent, 0.9) }}>
-        <span style={{ color: accent }}>{icon}</span>
-        {title}
-      </h3>
-      {children}
+    <section className="px-5 py-3.5" style={{ borderTop: "1px solid var(--border)" }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-2"
+      >
+        <h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider" style={{ color: rgba(accent, 0.9) }}>
+          <span style={{ color: accent }}>{icon}</span>
+          {title}
+        </h3>
+        <ChevronDown
+          size={15}
+          className="shrink-0 transition-transform duration-200"
+          style={{ color: "var(--text-faint)", transform: open ? "rotate(180deg)" : "none" }}
+        />
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="pt-2.5">{children}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </section>
   );
 }
@@ -49,9 +84,12 @@ export function DetailPanel() {
   const mode = useUniverse((s) => s.mode);
   const closeDetail = useUniverse((s) => s.closeDetail);
   const zoomInto = useUniverse((s) => s.zoomInto);
+  const density = useUniverse((s) => s.lessonDensity);
+  const setDensity = useUniverse((s) => s.setLessonDensity);
 
   const concept = selectedConceptId ? getConcept(selectedConceptId) : undefined;
   const open = Boolean(concept) && mode !== "internals";
+  const deep = density === "deep";
 
   return (
     <AnimatePresence>
@@ -100,6 +138,22 @@ export function DetailPanel() {
                   <p className="mt-3 text-[13px] italic leading-snug" style={{ color: "var(--text-dim)" }}>
                     “{concept.tagline}”
                   </p>
+                  {/* Density toggle — short lesson for beginners, everything expanded for depth. */}
+                  <div className="mt-3 inline-flex rounded-lg p-0.5" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid var(--border)" }}>
+                    {(["beginner", "deep"] as const).map((d) => (
+                      <button
+                        key={d}
+                        onClick={() => setDensity(d)}
+                        className="rounded-md px-2.5 py-1 text-[11px] font-semibold capitalize transition-colors"
+                        style={{
+                          background: density === d ? rgba(accent, 0.18) : "transparent",
+                          color: density === d ? accent : "var(--text-faint)",
+                        }}
+                      >
+                        {d}
+                      </button>
+                    ))}
+                  </div>
                   {concept.internal && (
                     <button
                       onClick={() => zoomInto(concept.id)}
@@ -132,14 +186,14 @@ export function DetailPanel() {
                 )}
 
                 {/* Body */}
-                <Section title="Definition" icon={<Icon name={concept.icon} size={13} />} accent={accent}>
+                <Section title="Definition" icon={<Icon name={concept.icon} size={13} />} accent={accent} defaultOpen>
                   <p className="text-[13.5px] leading-relaxed" style={{ color: "var(--text)" }}>
                     {concept.definition}
                   </p>
                 </Section>
 
                 {concept.misconception && (
-                  <Section title="Common misconception" icon={<Ghost size={13} />} accent={accent}>
+                  <Section title="Common misconception" icon={<Ghost size={13} />} accent={accent} defaultOpen={deep}>
                     <div className="space-y-2">
                       <div className="flex items-start gap-2 text-[12.5px] leading-snug" style={{ color: "var(--text-dim)" }}>
                         <span className="mt-0.5 shrink-0 rounded px-1 text-[9px] font-bold uppercase tracking-wide" style={{ background: "rgba(248,113,113,0.16)", color: "var(--bad)" }}>
@@ -157,27 +211,27 @@ export function DetailPanel() {
                   </Section>
                 )}
 
-                <Section title="Why it exists" icon={<Lightbulb size={13} />} accent={accent}>
+                <Section title="Why it exists" icon={<Lightbulb size={13} />} accent={accent} defaultOpen={deep}>
                   <p className="text-[13px] leading-relaxed" style={{ color: "var(--text-dim)" }}>
                     {concept.whyItExists}
                   </p>
                 </Section>
 
-                <Section title="Problem it solves" icon={<AlertCircle size={13} />} accent={accent}>
+                <Section title="Problem it solves" icon={<AlertCircle size={13} />} accent={accent} defaultOpen={deep}>
                   <p className="text-[13px] leading-relaxed" style={{ color: "var(--text-dim)" }}>
                     {concept.problemSolved}
                   </p>
                 </Section>
 
                 {concept.consequenceIfRemoved && (
-                  <Section title="What breaks without it" icon={<Unplug size={13} />} accent={accent}>
+                  <Section title="What breaks without it" icon={<Unplug size={13} />} accent={accent} defaultOpen={deep}>
                     <p className="text-[13px] leading-relaxed" style={{ color: "var(--text-dim)" }}>
                       {concept.consequenceIfRemoved}
                     </p>
                   </Section>
                 )}
 
-                <Section title="Tradeoffs" icon={<Shuffle size={13} />} accent={accent}>
+                <Section title="Tradeoffs" icon={<Shuffle size={13} />} accent={accent} defaultOpen>
                   <div className="space-y-1.5">
                     {concept.advantages.map((a) => (
                       <div key={a} className="flex items-start gap-2 text-[12.5px] leading-snug" style={{ color: "var(--text)" }}>
@@ -194,7 +248,7 @@ export function DetailPanel() {
                   </div>
                 </Section>
 
-                <Section title="Alternatives" icon={<Shuffle size={13} />} accent={accent}>
+                <Section title="Alternatives" icon={<Shuffle size={13} />} accent={accent} defaultOpen={deep}>
                   <div className="space-y-2">
                     {concept.alternatives.map((alt) => (
                       <div key={alt.name} className="rounded-xl px-3 py-2" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)" }}>
@@ -205,7 +259,7 @@ export function DetailPanel() {
                   </div>
                 </Section>
 
-                <Section title="Real-world usage" icon={<Building2 size={13} />} accent={accent}>
+                <Section title="Real-world usage" icon={<Building2 size={13} />} accent={accent} defaultOpen={deep}>
                   <ul className="space-y-1.5">
                     {concept.realWorld.map((r) => (
                       <li key={r} className="flex items-start gap-2 text-[12.5px] leading-snug" style={{ color: "var(--text-dim)" }}>
@@ -216,7 +270,7 @@ export function DetailPanel() {
                   </ul>
                 </Section>
 
-                <Section title="Interview questions" icon={<HelpCircle size={13} />} accent={accent}>
+                <Section title="Interview questions" icon={<HelpCircle size={13} />} accent={accent} defaultOpen={deep}>
                   <ol className="space-y-2">
                     {concept.interviewQuestions.map((q, i) => (
                       <li key={q} className="flex gap-2.5 text-[12.5px] leading-snug" style={{ color: "var(--text)" }}>
@@ -229,11 +283,22 @@ export function DetailPanel() {
                   </ol>
                 </Section>
 
-                <Section title="Scaling implications" icon={<TrendingUp size={13} />} accent={accent}>
+                <Section title="Scaling implications" icon={<TrendingUp size={13} />} accent={accent} defaultOpen={deep}>
                   <p className="text-[13px] leading-relaxed" style={{ color: "var(--text-dim)" }}>
                     {concept.scaling}
                   </p>
                 </Section>
+
+                {/* Quick check — turns reading into recall before you move on. */}
+                {(() => {
+                  const q = quizForConcept(concept.id);
+                  if (!q) return null;
+                  return (
+                    <Section title="Quick check" icon={<Dumbbell size={13} />} accent={accent} defaultOpen={deep}>
+                      <QuizCard question={q} accent={accent} />
+                    </Section>
+                  );
+                })()}
 
                 <div className="h-3" />
               </>

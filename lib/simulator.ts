@@ -111,6 +111,8 @@ export interface SimulationResult {
   bottleneckHeat: number;
   suggestions: string[];
   narrative: string;
+  /** Secondary, non-blocking observations (hot keys, queue lag, the frontier). */
+  notes: string[];
   /** Estimated end-to-end p99 latency in milliseconds. */
   p99Latency: number;
   /** Composite availability, 0–1 (the "nines"). */
@@ -146,6 +148,28 @@ function dbHeat(demand: number, sols: Set<string>): number {
   return Math.max(dbReadHeat(demand, sols), dbWriteHeat(demand, sols));
 }
 
+/**
+ * The cache is not free capacity: it absorbs hot reads, but its own nodes have
+ * finite throughput and — at the very top of the curve — hot keys concentrate
+ * load on a single shard. So the cache visibly works harder as traffic climbs.
+ */
+function cacheHeat(demand: number, sols: Set<string>): number {
+  if (!has(sols, "cache")) return 0;
+  const hotKey = demand >= 1.0 ? 1.35 : 1; // skew concentrates load at hyperscale
+  return Math.min(1.05, (demand * 0.8) / 1.8 * hotKey);
+}
+
+/**
+ * The queue smooths write spikes, but if workers drain slower than ingest the
+ * backlog grows. Sharding (more write capacity downstream) lets workers commit
+ * faster, draining the queue.
+ */
+function queueHeat(demand: number, sols: Set<string>): number {
+  if (!has(sols, "queue")) return 0;
+  const drain = has(sols, "sharding") ? 0.7 : 1;
+  return Math.min(1.05, (demand * 0.7) / 1.3 * drain);
+}
+
 function statusFor(heat: number): HeatStatus {
   if (heat < 0.45) return "healthy";
   if (heat < 0.75) return "warm";
@@ -177,6 +201,8 @@ export function computeSimulation(tierIndex: number, sols: Set<string>): Simulat
 
   const aHeat = appHeat(demand, sols);
   const dHeat = dbHeat(demand, sols);
+  const cHeat = cacheHeat(demand, sols);
+  const qHeat = queueHeat(demand, sols);
 
   // Build visible nodes.
   const nodes: SimNodeState[] = SIM_NODES.filter(
@@ -207,7 +233,9 @@ export function computeSimulation(tierIndex: number, sols: Set<string>): Simulat
         break;
       case "cache":
         label = "Redis Cache";
-        sublabel = "absorbs hot reads";
+        heat = cHeat;
+        status = statusFor(cHeat);
+        sublabel = cHeat >= 0.6 ? `${Math.round(cHeat * 100)}% — hot keys forming` : `absorbing reads · ${Math.round(cHeat * 100)}%`;
         break;
       case "replica":
         label = "Read Replicas";
@@ -223,7 +251,9 @@ export function computeSimulation(tierIndex: number, sols: Set<string>): Simulat
         break;
       case "queue":
         label = "Message Queue";
-        sublabel = "async writes";
+        heat = qHeat;
+        status = statusFor(qHeat);
+        sublabel = qHeat >= 0.6 ? `backlog rising · ${Math.round(qHeat * 100)}%` : `async writes · ${Math.round(qHeat * 100)}%`;
         break;
     }
     return { id: n.id, label, sublabel, x: n.x, y: n.y, status, heat, conceptId: n.conceptId };
@@ -282,10 +312,25 @@ export function computeSimulation(tierIndex: number, sols: Set<string>): Simulat
   const p99Latency = Math.round(appLatency + dataLatency);
 
   // Availability: redundancy (load balancer, replicas/sharding) adds nines.
-  // Sequential dependencies multiply, so the weakest tier dominates.
+  // Sequential dependencies multiply, so the weakest tier dominates — and each
+  // new dependency you add is itself a thing that can fail.
   const appAvail = has(sols, "loadbalancer") ? 0.9999 : 0.999;
   const dbAvail = has(sols, "replicas") || has(sols, "sharding") ? 0.9999 : 0.999;
-  const availability = appAvail * dbAvail;
+  // A single cache you depend on is a new failure mode: if it falls over, the
+  // unshielded read storm can take the database with it (cache stampede).
+  const cacheAvail = has(sols, "cache") && !has(sols, "replicas") ? 0.9997 : 1;
+  const availability = appAvail * dbAvail * cacheAvail;
+
+  // Secondary observations — the realism the single bottleneck doesn't capture.
+  const notes: string[] = [];
+  if (cHeat >= 0.6)
+    notes.push(`Cache is doing heavy lifting (~${Math.round(cHeat * 100)}%). At this scale, hot keys concentrate on one shard — you'd spread it with consistent hashing and watch for stampedes.`);
+  if (qHeat >= 0.6)
+    notes.push(`Queue backlog is rising (~${Math.round(qHeat * 100)}%): workers are draining slower than ingest. More write capacity (sharding) or more workers clears it.`);
+  if (has(sols, "cache") && !has(sols, "replicas") && demand >= 0.85)
+    notes.push("You depend on a single cache with no replica behind it — if it drops, the read storm hits the database directly.");
+  if (!bottleneck && demand >= 1.0)
+    notes.push("Every tier is cooled — but at this scale the real frontier is coordination: hot keys, shard rebalancing and cross-shard queries. No architecture is truly free.");
 
   return {
     nodes,
@@ -294,6 +339,7 @@ export function computeSimulation(tierIndex: number, sols: Set<string>): Simulat
     bottleneckHeat,
     suggestions,
     narrative: tier.narrative,
+    notes,
     p99Latency,
     availability,
   };

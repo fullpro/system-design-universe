@@ -38,8 +38,18 @@ function InternalNodeImpl({ data }: NodeProps) {
     <div
       className="relative flex w-[184px] flex-col items-center gap-0.5 rounded-2xl px-4 py-3 text-center sheen transition-all duration-300"
       style={{
-        background: failed ? "rgba(248,113,113,0.16)" : isActive ? rgba(accent, 0.16) : isStart ? rgba(accent, 0.22) : "var(--panel)",
-        border: `1px solid ${rgba(color, failed || isActive || isDecision || isTerminal ? 0.6 : 0.4)}`,
+        background: failed
+          ? "rgba(248,113,113,0.16)"
+          : isActive
+            ? rgba(accent, 0.16)
+            : isStart
+              ? rgba(accent, 0.22)
+              : `linear-gradient(180deg, ${rgba(color, 0.1)}, var(--panel) 60%)`,
+        // A clear coloured top edge so every node reads as its kind/category at a glance.
+        borderTop: `2.5px solid ${rgba(color, failed || isActive ? 0.9 : 0.7)}`,
+        borderRight: `1px solid ${rgba(color, failed || isActive || isDecision || isTerminal ? 0.5 : 0.25)}`,
+        borderBottom: `1px solid ${rgba(color, failed || isActive || isDecision || isTerminal ? 0.5 : 0.25)}`,
+        borderLeft: `1px solid ${rgba(color, failed || isActive || isDecision || isTerminal ? 0.5 : 0.25)}`,
         boxShadow: failed
           ? `0 0 28px -4px var(--bad)`
           : isActive

@@ -33,12 +33,13 @@ function FlowEdgeImpl({
     targetY,
     sourcePosition,
     targetPosition,
-    curvature: 0.28,
+    curvature: 0.35,
   });
 
   const d = (data ?? {}) as FlowEdgeData;
   const color = d.danger ? "var(--bad)" : d.accent ?? "#6366f1";
   const pathId = `${id}-path`;
+  const arrowId = `${id}-arrow`;
 
   // Journey states fade the off-path graph and brighten what's been crossed.
   const glowOpacity = d.dim ? 0.04 : d.traversed ? 0.18 : 0.12;
@@ -47,6 +48,21 @@ function FlowEdgeImpl({
 
   return (
     <>
+      {/* directional arrowhead, coloured & faded to match the edge */}
+      <defs>
+        <marker
+          id={arrowId}
+          viewBox="0 0 10 10"
+          refX="8.5"
+          refY="5"
+          markerWidth="7"
+          markerHeight="7"
+          orient="auto-start-reverse"
+          markerUnits="userSpaceOnUse"
+        >
+          <path d="M0,0 L10,5 L0,10 z" fill={color} fillOpacity={Math.min(1, baseOpacity + 0.35)} />
+        </marker>
+      </defs>
       {/* soft glow */}
       <path d={path} fill="none" stroke={color} strokeOpacity={glowOpacity} strokeWidth={7} strokeLinecap="round" />
       {/* base line */}
@@ -59,6 +75,7 @@ function FlowEdgeImpl({
         strokeWidth={baseWidth}
         strokeLinecap="round"
         strokeDasharray={d.dashed ? "5 6" : undefined}
+        markerEnd={`url(#${arrowId})`}
       />
       {/* animated dash overlay */}
       {d.animated && (

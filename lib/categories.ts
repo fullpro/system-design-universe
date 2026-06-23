@@ -15,7 +15,8 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     id: "networking",
     label: "Networking",
     blurb: "How packets find their way: DNS, TCP, TLS, HTTP.",
-    accent: "#60a5fa",
+    // Deeper true-blue, pulled away from client's sky and edge's cyan.
+    accent: "#3b82f6",
   },
   edge: {
     id: "edge",
@@ -51,7 +52,8 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     id: "messaging",
     label: "Messaging",
     blurb: "Decoupling producers from consumers over time.",
-    accent: "#f472b6",
+    // Saturated magenta-pink, separated from cache rose and reliability red.
+    accent: "#ec4899",
   },
   scalability: {
     id: "scalability",
@@ -63,13 +65,15 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     id: "reliability",
     label: "Reliability",
     blurb: "Staying up and correct when things go wrong.",
-    accent: "#f87171",
+    // Pure red — clearly distinct from cache rose and messaging pink.
+    accent: "#ef4444",
   },
   observability: {
     id: "observability",
     label: "Observability",
     blurb: "Knowing what your system is actually doing.",
-    accent: "#2dd4bf",
+    // Greener teal, pulled away from edge's cyan.
+    accent: "#14b8a6",
   },
   analytics: {
     id: "analytics",

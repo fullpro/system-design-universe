@@ -2,17 +2,21 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Compass, Gauge, GitBranch, Blocks, GraduationCap, BrainCircuit, Orbit, HelpCircle, X } from "lucide-react";
+import { Compass, Gauge, GitBranch, Blocks, GraduationCap, BrainCircuit, Orbit, HelpCircle, X, Search, Share2, Route, Check } from "lucide-react";
 import { useUniverse } from "@/lib/store";
+import { buildShareUrl } from "@/lib/persistence";
 import type { ViewMode } from "@/lib/types";
 
-const TABS: { id: ViewMode; label: string; short: string; icon: React.ReactNode }[] = [
-  { id: "map", label: "Explore", short: "Map", icon: <Compass size={15} /> },
-  { id: "simulator", label: "Simulate", short: "Sim", icon: <Gauge size={15} /> },
-  { id: "evolution", label: "Evolve", short: "Evo", icon: <GitBranch size={15} /> },
-  { id: "studio", label: "Build", short: "Build", icon: <Blocks size={15} /> },
-  { id: "learn", label: "Learn", short: "Learn", icon: <GraduationCap size={15} /> },
-  { id: "reason", label: "Reason", short: "Think", icon: <BrainCircuit size={15} /> },
+// One canonical name per mode (the old "Map/Think" synonyms are gone). On mobile,
+// only the active tab shows its label; the icon carries the rest — so the bar
+// never overflows.
+const TABS: { id: ViewMode; label: string; icon: React.ReactNode }[] = [
+  { id: "map", label: "Explore", icon: <Compass size={15} /> },
+  { id: "simulator", label: "Simulate", icon: <Gauge size={15} /> },
+  { id: "evolution", label: "Evolve", icon: <GitBranch size={15} /> },
+  { id: "studio", label: "Build", icon: <Blocks size={15} /> },
+  { id: "learn", label: "Learn", icon: <GraduationCap size={15} /> },
+  { id: "reason", label: "Reason", icon: <BrainCircuit size={15} /> },
 ];
 
 const HELP = [
@@ -27,10 +31,24 @@ const HELP = [
 export function TopBar() {
   const mode = useUniverse((s) => s.mode);
   const setMode = useUniverse((s) => s.setMode);
+  const setCommandOpen = useUniverse((s) => s.setCommandOpen);
+  const reopenOnboarding = useUniverse((s) => s.reopenOnboarding);
   const [helpOpen, setHelpOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const active: ViewMode = mode === "internals" ? "map" : mode;
+
+  const share = async () => {
+    const url = buildShareUrl();
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      window.prompt("Copy this shareable link:", url);
+    }
+  };
 
   return (
     <header className="absolute inset-x-2 top-2 z-40 flex items-center gap-1.5 sm:inset-x-3 sm:top-3 sm:justify-between sm:gap-2">
@@ -99,9 +117,28 @@ export function TopBar() {
                 ))}
               </div>
 
+              <div className="mt-5 grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => {
+                    setAboutOpen(false);
+                    reopenOnboarding();
+                  }}
+                  className="flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-[12.5px] font-medium transition-colors hover:bg-white/10"
+                  style={{ border: "1px solid var(--border)", color: "var(--text-dim)" }}
+                >
+                  <Route size={14} /> Replay path
+                </button>
+                <button
+                  onClick={share}
+                  className="flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-[12.5px] font-medium transition-colors hover:bg-white/10"
+                  style={{ border: "1px solid var(--border)", color: copied ? "var(--good)" : "var(--text-dim)" }}
+                >
+                  {copied ? <><Check size={14} /> Copied!</> : <><Share2 size={14} /> Share view</>}
+                </button>
+              </div>
               <button
                 onClick={() => setAboutOpen(false)}
-                className="mt-5 flex w-full items-center justify-center rounded-xl py-2.5 text-[13px] font-semibold transition-all hover:brightness-110"
+                className="mt-2 flex w-full items-center justify-center rounded-xl py-2.5 text-[13px] font-semibold transition-all hover:brightness-110"
                 style={{ background: "rgba(99,102,241,0.2)", border: "1px solid rgba(99,102,241,0.45)", color: "#c7d2fe" }}
               >
                 Got it
@@ -112,14 +149,17 @@ export function TopBar() {
       </AnimatePresence>
 
       {/* Mode switcher */}
-      <div className="glass sheen flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto rounded-2xl p-1 sm:flex-initial sm:gap-1">
+      <div className="glass sheen flex min-w-0 items-center gap-0.5 rounded-2xl p-1 sm:gap-1">
         {TABS.map((tab) => {
           const isActive = active === tab.id;
           return (
             <button
               key={tab.id}
               onClick={() => setMode(tab.id)}
-              className="relative flex shrink-0 items-center gap-1 rounded-xl px-2 py-1.5 text-[12px] font-medium transition-colors sm:gap-1.5 sm:px-3.5 sm:text-[13px]"
+              title={tab.label}
+              aria-label={tab.label}
+              aria-current={isActive ? "page" : undefined}
+              className="relative flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[13px] font-medium transition-colors sm:px-3.5"
               style={{ color: isActive ? "#fff" : "var(--text-dim)" }}
             >
               {isActive && (
@@ -131,20 +171,28 @@ export function TopBar() {
                 />
               )}
               <span className="relative z-10">{tab.icon}</span>
-              <span className="relative z-10 text-[10px] sm:text-[13px]">
-                <span className="sm:hidden">{tab.short}</span>
-                <span className="hidden sm:inline">{tab.label}</span>
-              </span>
+              {/* Label always on desktop; on mobile only the active tab is labelled. */}
+              <span className={`relative z-10 ${isActive ? "inline" : "hidden"} sm:inline`}>{tab.label}</span>
             </button>
           );
         })}
       </div>
 
-      {/* Help — hidden on mobile to save tab bar space */}
-      <div className="relative hidden sm:block">
+      {/* Right cluster: search (everywhere) + guide (desktop) */}
+      <div className="relative flex shrink-0 items-center gap-1.5">
+        <button
+          onClick={() => setCommandOpen(true)}
+          aria-label="Search (press ⌘K)"
+          title="Search concepts, tools & modes — ⌘K"
+          className="glass sheen flex h-10 items-center gap-1.5 rounded-2xl px-2.5 text-[13px] font-medium transition-colors hover:brightness-125 sm:px-3"
+          style={{ color: "var(--text-dim)" }}
+        >
+          <Search size={16} />
+          <kbd className="hidden rounded px-1 py-0.5 text-[10px] lg:inline" style={{ background: "rgba(255,255,255,0.06)", color: "var(--text-faint)" }}>⌘K</kbd>
+        </button>
         <button
           onClick={() => setHelpOpen((o) => !o)}
-          className="glass sheen flex h-10 items-center gap-1.5 rounded-2xl px-3 text-[13px] font-medium transition-colors hover:brightness-125"
+          className="glass sheen hidden h-10 items-center gap-1.5 rounded-2xl px-3 text-[13px] font-medium transition-colors hover:brightness-125 sm:flex"
           style={{ color: "var(--text-dim)" }}
         >
           <HelpCircle size={16} /> <span className="hidden md:inline">Guide</span>

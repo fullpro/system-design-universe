@@ -109,6 +109,19 @@ export interface MapNodeDef {
   id: string;
   x: number;
   y: number;
+  label?: string;
+  /** If set, this node is a child positioned relative to the parent group. */
+  parentId?: string;
+}
+
+export interface MapGroupDef {
+  id: string;
+  conceptId: string;
+  label?: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 export type HandleId = "sb" | "tt" | "sl" | "tl" | "sr" | "tr" | "st" | "tb";

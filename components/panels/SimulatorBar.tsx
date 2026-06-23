@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, CheckCircle2, RotateCcw, Sparkles, Users, Timer, ShieldCheck, Wrench, ArrowRight } from "lucide-react";
+import { AlertTriangle, CheckCircle2, RotateCcw, Sparkles, Users, Timer, ShieldCheck, Wrench, ArrowRight, Info } from "lucide-react";
 import { useUniverse } from "@/lib/store";
 import { SIM_TIERS, SIM_SOLUTIONS, computeSimulation, formatAvailability, formatDowntime } from "@/lib/simulator";
 import { getConcept } from "@/lib/concepts";
@@ -151,6 +151,18 @@ export function SimulatorBar() {
               <span style={{ color: "var(--text-faint)" }}>{formatDowntime(sim.availability)}</span>
             </span>
           </div>
+
+          {/* Secondary realities the single bottleneck doesn't capture. */}
+          {sim.notes.length > 0 && (
+            <div className="mt-2 space-y-1">
+              {sim.notes.map((note) => (
+                <div key={note} className="flex items-start gap-1.5 text-[11px] leading-snug" style={{ color: "var(--text-faint)" }}>
+                  <Info size={11} className="mt-0.5 shrink-0" style={{ color: "#a5b4fc" }} />
+                  <span>{note}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Reset */}
@@ -241,6 +253,9 @@ export function SimulatorBar() {
             </button>
           );
         })}
+        <span className="ml-auto hidden text-[9.5px] lg:inline" style={{ color: "var(--text-faint)" }} title="Heat = demand ÷ capacity; mitigations cut demand or add capacity. Numbers are illustrative-but-defensible, chosen to teach the shape of the tradeoff, not to predict a specific system.">
+          illustrative model — hover for assumptions
+        </span>
       </div>
     </motion.div>
   );

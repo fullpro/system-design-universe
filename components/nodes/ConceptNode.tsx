@@ -1,8 +1,8 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useState } from "react";
 import type { NodeProps } from "@xyflow/react";
-import { Maximize2 } from "lucide-react";
+import { Maximize2, Info } from "lucide-react";
 import { getConcept } from "@/lib/concepts";
 import { CATEGORIES } from "@/lib/categories";
 import { rgba } from "@/lib/color";
@@ -39,6 +39,10 @@ function ConceptNodeImpl({ data }: NodeProps) {
   const { conceptId, labelOverride, journeyState, faded } = data as ConceptNodeData;
   const concept = getConcept(conceptId);
   const selected = useUniverse((s) => s.selectedConceptId === conceptId);
+  const selectConcept = useUniverse((s) => s.selectConcept);
+  const zoomInto = useUniverse((s) => s.zoomInto);
+  // Tap-to-peek: hover is unavailable on touch, so the preview is also toggleable.
+  const [peek, setPeek] = useState(false);
 
   if (!concept) return null;
   const cat = CATEGORIES[concept.category];
@@ -69,34 +73,63 @@ function ConceptNodeImpl({ data }: NodeProps) {
     "--node-glow": rgba(accent, 0.3),
   } as React.CSSProperties;
 
+  const hint = concept.internal ? " Press Enter for the lesson, Z to zoom into its internals." : " Press Enter for the lesson.";
+
   return (
     <div
       role="button"
+      tabIndex={0}
+      aria-label={`${cat.label}: ${concept.name}. ${concept.tagline}${hint}`}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          selectConcept(conceptId);
+        } else if ((e.key === "z" || e.key === "Z") && concept.internal) {
+          e.preventDefault();
+          zoomInto(conceptId);
+        }
+      }}
       className="concept-node group relative flex w-[240px] cursor-pointer flex-col rounded-2xl text-left transition-all duration-300"
       style={style}
     >
       <NodeHandles />
 
-      {/* Hover preview — the why/tradeoff/alternative spine, instantly, without opening the full lesson. */}
+      {/* Tap-to-peek button — surfaces the same preview on touch, where hover never fires. */}
+      {showHover && (
+        <button
+          aria-label={`Quick facts about ${concept.name}`}
+          aria-expanded={peek}
+          onClick={(e) => {
+            e.stopPropagation();
+            setPeek((p) => !p);
+          }}
+          className="absolute left-2 top-2 z-50 flex h-5 w-5 items-center justify-center rounded-md transition-colors"
+          style={{ background: peek ? rgba(accent, 0.3) : "rgba(255,255,255,0.06)", color: peek ? accent : "var(--text-faint)" }}
+        >
+          <Info size={11} />
+        </button>
+      )}
+
+      {/* Preview — the why/tradeoff/alternative spine, instantly, without opening the full lesson.
+          Shows on hover (mouse) or when peeked (touch). */}
       {showHover && (
         <div
-          className="pointer-events-none absolute left-full top-0 z-50 ml-3 w-[230px] rounded-xl p-3 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+          className={`absolute left-full top-0 z-50 ml-3 w-[230px] rounded-xl p-3 transition-opacity duration-200 ${peek ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0 group-hover:opacity-100"}`}
           style={{ background: "var(--panel-solid)", border: `1px solid ${rgba(accent, 0.3)}`, boxShadow: "0 18px 50px -16px rgba(0,0,0,0.85)" }}
         >
+          {/* A glance, not the lesson: one-line intuition + the single sharpest
+              tradeoff. The full prose lives in the panel (click to open). */}
           {concept.mentalModel && (
             <div className="mb-2 text-[11.5px] font-medium italic leading-snug" style={{ color: rgba(accent, 0.95) }}>
               “{concept.mentalModel}”
             </div>
           )}
-          <HoverRow label="Problem" value={concept.problemSolved} accent={accent} />
           <HoverRow label="Why it wins" value={concept.advantages[0]} accent={accent} />
           <HoverRow label="Tradeoff" value={concept.disadvantages[0]} accent={accent} />
           <HoverRow label="Instead" value={concept.alternatives[0]?.name} accent={accent} />
-          {hasInternal && (
-            <div className="mt-2 text-[9.5px] font-medium uppercase tracking-wide" style={{ color: rgba(accent, 0.7) }}>
-              Click to open · zoom for internals
-            </div>
-          )}
+          <div className="mt-2 text-[9.5px] font-medium uppercase tracking-wide" style={{ color: rgba(accent, 0.7) }}>
+            {hasInternal ? "Click for the full lesson · Z to zoom in" : "Click for the full lesson"}
+          </div>
         </div>
       )}
 
@@ -143,10 +176,11 @@ function ConceptNodeImpl({ data }: NodeProps) {
         </p>
       )}
 
-      {/* Zoom-in hint */}
+      {/* Zoom-in hint — persistently visible (not hover-gated) so the "this has internals"
+          affordance is discoverable on touch and at a glance. */}
       {hasInternal && (
         <span
-          className="absolute right-2.5 top-2.5 flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+          className="absolute right-2.5 top-2.5 flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide opacity-70 transition-opacity duration-200 group-hover:opacity-100"
           style={{ background: rgba(accent, 0.18), color: accent }}
         >
           <Maximize2 size={9} /> zoom

@@ -2,14 +2,15 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Dumbbell } from "lucide-react";
 import { CONCEPTS } from "@/lib/concepts";
 import { CATEGORIES, CATEGORY_ORDER } from "@/lib/categories";
 import { rgba } from "@/lib/color";
 import { useUniverse } from "@/lib/store";
 import type { CategoryId, Concept } from "@/lib/types";
 import { Icon } from "@/components/ui/Icon";
-import { WidgetModal } from "@/components/learn/WidgetModal";
 import { TOOLS, type ToolDef } from "@/components/learn/registry";
+import { SelfTest } from "@/components/learn/Quiz";
 
 function ConceptCard({ concept, index }: { concept: Concept; index: number }) {
   const selectConcept = useUniverse((s) => s.selectConcept);
@@ -72,11 +73,12 @@ function CategorySection({ category, concepts }: { category: CategoryId; concept
 }
 
 export function LearnGallery() {
-  const [widget, setWidget] = useState<ToolDef | null>(null);
+  const [testing, setTesting] = useState(false);
   const closeDetail = useUniverse((s) => s.closeDetail);
+  const openTool = useUniverse((s) => s.openTool);
   const openWidget = (tool: ToolDef) => {
     closeDetail();
-    setWidget(tool);
+    openTool(tool.id);
   };
 
   // Group concepts by category once.
@@ -94,12 +96,21 @@ export function LearnGallery() {
         <motion.header
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-7 mt-2"
+          className="mb-7 mt-2 flex flex-wrap items-end justify-between gap-3"
         >
-          <h1 className="text-xl font-bold tracking-tight sm:text-2xl" style={{ color: "var(--text)" }}>The Atlas</h1>
-          <p className="mt-1 text-[13px]" style={{ color: "var(--text-dim)" }}>
-            Every concept and cross-cutting principle in one place — {CONCEPTS.length} lessons. Click any card to open it.
-          </p>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight sm:text-2xl" style={{ color: "var(--text)" }}>The Atlas</h1>
+            <p className="mt-1 text-[13px]" style={{ color: "var(--text-dim)" }}>
+              Every concept and cross-cutting principle in one place — {CONCEPTS.length} lessons. Click any card to open it.
+            </p>
+          </div>
+          <button
+            onClick={() => setTesting(true)}
+            className="sheen flex items-center gap-2 rounded-xl px-3.5 py-2 text-[13px] font-semibold transition-all hover:-translate-y-0.5"
+            style={{ background: "rgba(99,102,241,0.18)", border: "1px solid rgba(99,102,241,0.45)", color: "#c7d2fe" }}
+          >
+            <Dumbbell size={15} /> Test yourself
+          </button>
         </motion.header>
 
         {/* Interactive tools */}
@@ -139,17 +150,7 @@ export function LearnGallery() {
         })}
       </div>
 
-      <AnimatePresence>
-        {widget && (
-          <WidgetModal
-            title={widget.title}
-            subtitle={widget.subtitle}
-            onClose={() => setWidget(null)}
-          >
-            {widget.render()}
-          </WidgetModal>
-        )}
-      </AnimatePresence>
+      <AnimatePresence>{testing && <SelfTest onClose={() => setTesting(false)} />}</AnimatePresence>
     </div>
   );
 }

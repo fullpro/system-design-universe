@@ -15,18 +15,19 @@ import {
 import { useUniverse } from "@/lib/store";
 import { getConcept } from "@/lib/concepts";
 import { CATEGORIES } from "@/lib/categories";
-import { MAP_NODES, MAP_EDGES } from "@/lib/map";
+import { MAP_NODES, MAP_EDGES, MAP_GROUPS } from "@/lib/map";
 import { layoutInternal } from "@/lib/internals";
 import { computeSimulation } from "@/lib/simulator";
 import { buildEvolution, EVOLUTION_POSITIONS } from "@/lib/evolution";
-import { JOURNEY } from "@/lib/journey";
+import { JOURNEYS } from "@/lib/journey";
 
 import { ConceptNode } from "./nodes/ConceptNode";
 import { InternalNode } from "./nodes/InternalNode";
 import { SimNode } from "./nodes/SimNode";
+import { GroupNode } from "./nodes/GroupNode";
 import { FlowEdge } from "./edges/FlowEdge";
 
-const nodeTypes = { concept: ConceptNode, internal: InternalNode, sim: SimNode };
+const nodeTypes = { concept: ConceptNode, internal: InternalNode, sim: SimNode, group: GroupNode };
 const edgeTypes = { flow: FlowEdge };
 
 function accentOf(conceptId: string): string {
@@ -46,6 +47,7 @@ export function Canvas() {
   const enabledSolutions = useUniverse((s) => s.enabledSolutions);
   const evolutionStage = useUniverse((s) => s.evolutionStage);
   const journeyStep = useUniverse((s) => s.journeyStep);
+  const journeyId = useUniverse((s) => s.journeyId);
   const layerFilter = useUniverse((s) => s.layerFilter);
   const internalsStep = useUniverse((s) => s.internalsStep);
   const internalsFailure = useUniverse((s) => s.internalsFailure);
@@ -58,30 +60,45 @@ export function Canvas() {
     if (mode === "map") {
       // When a request journey is running, derive which node is active, which
       // have been visited, and which edge the packet is currently traversing.
+      const journey = JOURNEYS.find((j) => j.id === journeyId) ?? JOURNEYS[0];
+      const hops = journey.hops;
       const onJourney = journeyStep !== null;
-      const activeNode = onJourney ? JOURNEY[journeyStep].node : null;
-      const activeVia = onJourney ? JOURNEY[journeyStep].via : null;
+      const activeNode = onJourney ? hops[journeyStep].node : null;
+      const activeVia = onJourney ? hops[journeyStep].via : null;
       const visited = new Set<string>();
       const traversed = new Set<string>();
       if (onJourney) {
         for (let i = 0; i <= journeyStep; i++) {
-          visited.add(JOURNEY[i].node);
-          if (JOURNEY[i].via) traversed.add(JOURNEY[i].via as string);
+          visited.add(hops[i].node);
+          if (hops[i].via) traversed.add(hops[i].via as string);
         }
       }
 
       // Layer focus (only when no journey is running) recedes off-layer nodes.
       const layerActive = !onJourney && layerFilter !== null;
 
-      const nodes: Node[] = MAP_NODES.map((n) => {
+      // Group nodes must appear before their children in the array.
+      const groupNodes: Node[] = MAP_GROUPS.map((g) => ({
+        id: g.id,
+        type: "group",
+        position: { x: g.x, y: g.y },
+        data: { conceptId: g.conceptId, labelOverride: g.label, width: g.width, height: g.height },
+        draggable: false,
+        selectable: false,
+        style: { width: g.width, height: g.height },
+      }));
+
+      const conceptNodes: Node[] = MAP_NODES.map((n) => {
         const concept = getConcept(n.id);
         const offLayer = layerActive && concept?.category !== layerFilter;
         return {
           id: n.id,
           type: "concept",
           position: { x: n.x, y: n.y },
+          ...(n.parentId ? { parentId: n.parentId, extent: "parent" as const } : {}),
           data: {
             conceptId: n.id,
+            labelOverride: n.label,
             journeyState: !onJourney
               ? undefined
               : n.id === activeNode
@@ -94,6 +111,8 @@ export function Canvas() {
           draggable: false,
         };
       });
+
+      const nodes: Node[] = [...groupNodes, ...conceptNodes];
       const edges: Edge[] = MAP_EDGES.map((e) => {
         const isActiveVia = onJourney && e.id === activeVia;
         const isTraversed = onJourney && traversed.has(e.id) && !isActiveVia;
@@ -238,18 +257,43 @@ export function Canvas() {
     }
 
     return { nodes: [], edges: [] };
-  }, [mode, zoomedConceptId, trafficTier, enabledSolutions, evolutionStage, journeyStep, layerFilter, internalsStep, internalsFailure]);
+  }, [mode, zoomedConceptId, trafficTier, enabledSolutions, evolutionStage, journeyStep, journeyId, layerFilter, internalsStep, internalsFailure]);
 
   // Re-frame the camera when the structure or available canvas area changes.
   // The journey deliberately stays out of this key so the camera holds steady
   // while the packet advances hop to hop.
   const refitKey = `${mode}:${zoomedConceptId}:${evolutionStage}:${enabledSolutions.length}:${panelOpen}:${journeyStep === null ? "off" : "on"}`;
   useEffect(() => {
-    const t = setTimeout(() => {
-      fitView({ duration: 650, padding: 0.2 });
-    }, 110);
-    return () => clearTimeout(t);
+    const reduce =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    // Custom nodes are measured asynchronously, so a single early fit can frame a
+    // degenerate (zero-height) bounding box and clip the graph. Fit twice: once on
+    // the next frame, once after measurement settles.
+    let raf = 0;
+    const fit = (duration: number) =>
+      fitView({ duration, padding: 0.2, minZoom: 0.2, maxZoom: 1.2 });
+    raf = requestAnimationFrame(() => fit(0));
+    const t = setTimeout(() => fit(reduce ? 0 : 650), 160);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(t);
+    };
   }, [refitKey, fitView]);
+
+  // Keep the whole graph framed when the viewport (or panel inset) resizes.
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout>;
+    const onResize = () => {
+      clearTimeout(t);
+      t = setTimeout(() => fitView({ duration: 0, padding: 0.2, minZoom: 0.2, maxZoom: 1.2 }), 120);
+    };
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      clearTimeout(t);
+    };
+  }, [fitView]);
 
   return (
     <ReactFlow
@@ -267,6 +311,7 @@ export function Canvas() {
       maxZoom={1.8}
       nodesDraggable={false}
       nodesConnectable={false}
+      nodesFocusable={false}
       elementsSelectable={false}
       proOptions={{ hideAttribution: true }}
       className="universe-flow"
@@ -284,8 +329,13 @@ export function Canvas() {
             const id = (n.data as { conceptId?: string })?.conceptId ?? n.id;
             return accentOf(id);
           }}
-          nodeStrokeWidth={0}
-          maskColor="rgba(6,7,12,0.78)"
+          nodeStrokeColor={(n) => {
+            const id = (n.data as { conceptId?: string })?.conceptId ?? n.id;
+            return accentOf(id);
+          }}
+          nodeStrokeWidth={3}
+          nodeBorderRadius={6}
+          maskColor="rgba(6,7,12,0.55)"
         />
       )}
     </ReactFlow>

@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Play, Pause, ChevronLeft, ChevronRight, X, GitBranch, Lightbulb, Gauge } from "lucide-react";
 import { useUniverse } from "@/lib/store";
-import { JOURNEY, JOURNEY_TOTAL } from "@/lib/journey";
+import { JOURNEYS } from "@/lib/journey";
 import { getConcept } from "@/lib/concepts";
 import { CATEGORIES } from "@/lib/categories";
 import { rgba } from "@/lib/color";
@@ -15,11 +15,16 @@ const HOP_MS = 2600;
 export function JourneyBar() {
   const step = useUniverse((s) => s.journeyStep);
   const playing = useUniverse((s) => s.journeyPlaying);
+  const journeyId = useUniverse((s) => s.journeyId);
+  const setJourneyId = useUniverse((s) => s.setJourneyId);
   const next = useUniverse((s) => s.journeyNext);
   const prev = useUniverse((s) => s.journeyPrev);
   const setStep = useUniverse((s) => s.setJourneyStep);
   const togglePlay = useUniverse((s) => s.toggleJourneyPlay);
   const end = useUniverse((s) => s.endJourney);
+
+  const journey = JOURNEYS.find((j) => j.id === journeyId) ?? JOURNEYS[0];
+  const hops = journey.hops;
 
   useEffect(() => {
     if (step === null || !playing) return;
@@ -28,10 +33,10 @@ export function JourneyBar() {
   }, [step, playing, next]);
 
   if (step === null) return null;
-  const hop = JOURNEY[step];
+  const hop = hops[step];
   const concept = getConcept(hop.node);
   const accent = concept ? CATEGORIES[concept.category].accent : "#818cf8";
-  const atEnd = step >= JOURNEY.length - 1;
+  const atEnd = step >= hops.length - 1;
 
   return (
     <motion.div
@@ -56,7 +61,7 @@ export function JourneyBar() {
                 {concept?.name ?? hop.node}
               </span>
               <span className="text-[9px] font-semibold tabular-nums" style={{ color: "var(--text-faint)" }}>
-                {step + 1}/{JOURNEY.length}
+                {step + 1}/{hops.length}
               </span>
             </div>
             <h2 className="truncate text-[13px] font-bold leading-tight" style={{ color: "var(--text)" }}>
@@ -93,7 +98,7 @@ export function JourneyBar() {
 
         {/* Scrubber */}
         <div className="mt-2 flex items-center gap-1">
-          {JOURNEY.map((h, i) => (
+          {hops.map((h, i) => (
             <button key={h.node + i} onClick={() => setStep(i)} className="flex-1">
               <div className="h-1 rounded-full transition-all duration-300" style={{ background: i <= step ? accent : "rgba(255,255,255,0.1)", opacity: i === step ? 1 : i < step ? 0.55 : 1 }} />
             </button>
@@ -112,7 +117,7 @@ export function JourneyBar() {
               {concept ? <Icon name={concept.icon} size={22} strokeWidth={1.7} /> : <Gauge size={20} />}
             </span>
             <span className="text-[10px] font-semibold tabular-nums" style={{ color: "var(--text-faint)" }}>
-              {step + 1}/{JOURNEY.length}
+              {step + 1}/{hops.length}
             </span>
           </div>
 
@@ -182,14 +187,31 @@ export function JourneyBar() {
           </div>
         </div>
 
-        <div className="mt-3 flex items-center gap-1.5 border-t pt-3" style={{ borderColor: "var(--border)" }}>
-          {JOURNEY.map((h, i) => (
+        <div className="mt-3 flex items-center gap-1.5 border-t pt-3 overflow-x-auto" style={{ borderColor: "var(--border)" }}>
+          <div className="flex shrink-0 gap-0.5">
+            {JOURNEYS.map((j) => (
+              <button
+                key={j.id}
+                onClick={() => setJourneyId(j.id)}
+                className="rounded px-1.5 py-0.5 text-[9px] font-semibold transition-all whitespace-nowrap"
+                style={{
+                  background: j.id === journeyId ? "rgba(99,102,241,0.25)" : "rgba(255,255,255,0.05)",
+                  border: `1px solid ${j.id === journeyId ? "rgba(99,102,241,0.5)" : "rgba(255,255,255,0.1)"}`,
+                  color: j.id === journeyId ? "#c7d2fe" : "var(--text-faint)",
+                }}
+                title={j.sublabel}
+              >
+                {j.label.split(" ")[0]}
+              </button>
+            ))}
+          </div>
+          {hops.map((h, i) => (
             <button key={h.node + i} onClick={() => setStep(i)} className="flex-1" title={h.title}>
               <div className="h-1.5 rounded-full transition-all duration-300" style={{ background: i <= step ? accent : "rgba(255,255,255,0.1)", opacity: i === step ? 1 : i < step ? 0.55 : 1 }} />
             </button>
           ))}
           <span className="ml-2 shrink-0 text-[10px] font-medium tabular-nums" style={{ color: "var(--text-faint)" }}>
-            {atEnd ? `total ${JOURNEY_TOTAL}` : "GET /products"}
+            {atEnd ? `total ${journey.total}` : journey.sublabel}
           </span>
         </div>
       </div>

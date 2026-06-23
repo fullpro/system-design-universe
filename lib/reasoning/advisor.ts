@@ -1,6 +1,6 @@
 import { type Requirements, derive, compact, type Derived } from "./requirements";
 import { scoreArchitecture } from "./scoring";
-import type { AxisScores } from "./axes";
+import { type AxisScores, type AxisWeights, weightedFit } from "./axes";
 
 /**
  * The Architecture Advisor — a deterministic, rule-based recommender.
@@ -58,7 +58,43 @@ const COMPONENT_META: Record<string, Meta> = {
 export interface AdvisorResult {
   recommendations: Recommendation[];
   scores: AxisScores;
+  /** 0–100 "fit to your constraints" — the weighted score (see weightedFit). */
+  fit: number;
+  /** The constraint-derived axis weights used to compute `fit`. */
+  weights: AxisWeights;
   summary: string;
+}
+
+/**
+ * Translate the user's constraints into how much each axis *matters to them*.
+ * The strongest constraints (a tight latency target, a high availability bar,
+ * hyperscale, a lean budget) raise the weight of the axis they map to.
+ */
+export function deriveAxisWeights(r: Requirements): AxisWeights {
+  const d = derive(r);
+  const w: AxisWeights = {
+    scalability: 1,
+    reliability: 1,
+    latency: 1,
+    cost: 1,
+    simplicity: 1,
+    operability: 1,
+  };
+  if (d.highScale) w.scalability = 2;
+  if (d.hyperScale) w.scalability = 3;
+  if (d.tightLatency) w.latency = r.latencyMs <= 60 ? 3 : 2.2;
+  if (d.highAvailability) w.reliability = r.availabilityNines >= 99.99 ? 3 : 2.2;
+  if (r.consistency === "strong") w.reliability = Math.max(w.reliability ?? 1, 1.6);
+  if (d.lean) {
+    w.cost = 3;
+    w.simplicity = 2;
+    w.operability = 1.6;
+  } else if (r.budget === "premium") {
+    w.cost = 0.4;
+  }
+  // A small team (lean) cares more that they can actually run it.
+  if (d.lean) w.operability = Math.max(w.operability ?? 1, 1.6);
+  return w;
 }
 
 export function runAdvisor(r: Requirements): AdvisorResult {
@@ -128,7 +164,9 @@ export function runAdvisor(r: Requirements): AdvisorResult {
 
   const recommendations = [...picked.values()].sort((a, b) => a.tier - b.tier);
   const scores = scoreArchitecture(recommendations.map((x) => x.id));
-  return { recommendations, scores, summary: buildSummary(r, d) };
+  const weights = deriveAxisWeights(r);
+  const fit = weightedFit(scores, weights);
+  return { recommendations, scores, fit, weights, summary: buildSummary(r, d) };
 }
 
 function buildSummary(r: Requirements, d: Derived): string {

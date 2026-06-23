@@ -3,7 +3,7 @@ import type { Node as RFNode, Edge as RFEdge } from "@xyflow/react";
 import type { ViewMode, ReasonTab, CategoryId } from "./types";
 import { SIM_TIERS } from "./simulator";
 import { EVOLUTION_STAGES } from "./evolution";
-import { JOURNEY } from "./journey";
+import { JOURNEYS } from "./journey";
 import { type Requirements, DEFAULT_REQUIREMENTS } from "./reasoning/requirements";
 import { type PriorityVector, type PriorityId, BALANCED_PRIORITIES } from "./reasoning/tradeoff";
 import { SCENARIOS } from "./reasoning/scenarios";
@@ -13,6 +13,24 @@ interface UniverseState {
   mode: ViewMode;
   /** The mode before entering internals; used to restore on back. */
   priorMode: ViewMode;
+
+  // Global overlays
+  /** Command palette (⌘K) visibility. */
+  commandOpen: boolean;
+  /** Interactive tool open in a modal from anywhere (Learn or the palette). */
+  activeToolId: string | null;
+
+  // Onboarding & progress (persisted)
+  /** True once the user has dismissed the first-run welcome. */
+  hasOnboarded: boolean;
+  /** True after persisted state has been read from localStorage (avoids SSR flash). */
+  hydrated: boolean;
+  /** Modes the user has visited at least once — drives learning-path progress. */
+  visitedModes: ViewMode[];
+  /** Concept ids the user has opened the full lesson for. */
+  studiedConcepts: string[];
+  /** Lesson density: "beginner" collapses depth; "deep" expands everything. */
+  lessonDensity: "beginner" | "deep";
   /** Concept whose detail panel is open (null = closed). */
   selectedConceptId: string | null;
   /** Concept whose internals are being explored in "internals" mode. */
@@ -41,6 +59,7 @@ interface UniverseState {
   evoSolved: number[];
 
   // Request Journey (Explore mode) — index of the active hop, or null when idle.
+  journeyId: string;
   journeyStep: number | null;
   journeyPlaying: boolean;
 
@@ -53,6 +72,13 @@ interface UniverseState {
   diagRevealed: boolean;
 
   // Actions
+  setCommandOpen: (open: boolean) => void;
+  openTool: (id: string) => void;
+  closeTool: () => void;
+  completeOnboarding: () => void;
+  reopenOnboarding: () => void;
+  setLessonDensity: (d: "beginner" | "deep") => void;
+  hydratePersisted: (patch: Partial<UniverseState>) => void;
   setMode: (mode: ViewMode) => void;
   selectConcept: (id: string) => void;
   closeDetail: () => void;
@@ -80,7 +106,8 @@ interface UniverseState {
   answerEvolution: () => void;
   dismissEvolutionChallenge: () => void;
 
-  startJourney: () => void;
+  startJourney: (id?: string) => void;
+  setJourneyId: (id: string) => void;
   endJourney: () => void;
   journeyNext: () => void;
   journeyPrev: () => void;
@@ -101,6 +128,13 @@ const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(mi
 export const useUniverse = create<UniverseState>((set) => ({
   mode: "map",
   priorMode: "map",
+  commandOpen: false,
+  activeToolId: null,
+  hasOnboarded: false,
+  hydrated: false,
+  visitedModes: [],
+  studiedConcepts: [],
+  lessonDensity: "beginner",
   selectedConceptId: null,
   zoomedConceptId: null,
   layerFilter: null,
@@ -114,6 +148,7 @@ export const useUniverse = create<UniverseState>((set) => ({
   evolutionStage: 0,
   evoChallenge: null,
   evoSolved: [],
+  journeyId: "read",
   journeyStep: null,
   journeyPlaying: false,
 
@@ -124,9 +159,18 @@ export const useUniverse = create<UniverseState>((set) => ({
   diagSelected: null,
   diagRevealed: false,
 
+  setCommandOpen: (open) => set({ commandOpen: open }),
+  openTool: (id) => set({ activeToolId: id, commandOpen: false }),
+  closeTool: () => set({ activeToolId: null }),
+  completeOnboarding: () => set({ hasOnboarded: true }),
+  reopenOnboarding: () => set({ hasOnboarded: false }),
+  setLessonDensity: (d) => set({ lessonDensity: d }),
+  hydratePersisted: (patch) => set({ ...patch, hydrated: true }),
+
   setMode: (mode) =>
     set((s) => ({
       mode,
+      visitedModes: s.visitedModes.includes(mode) ? s.visitedModes : [...s.visitedModes, mode],
       priorMode: mode === "internals" ? s.priorMode : mode,
       // Leaving internals clears the zoom target; opening a fresh mode closes the panel.
       zoomedConceptId: mode === "internals" ? s.zoomedConceptId : null,
@@ -136,7 +180,11 @@ export const useUniverse = create<UniverseState>((set) => ({
       journeyPlaying: mode === "map" ? s.journeyPlaying : false,
     })),
 
-  selectConcept: (id) => set({ selectedConceptId: id }),
+  selectConcept: (id) =>
+    set((s) => ({
+      selectedConceptId: id,
+      studiedConcepts: s.studiedConcepts.includes(id) ? s.studiedConcepts : [...s.studiedConcepts, id],
+    })),
   closeDetail: () => set({ selectedConceptId: null }),
 
   zoomInto: (id) =>
@@ -227,12 +275,14 @@ export const useUniverse = create<UniverseState>((set) => ({
   dismissEvolutionChallenge: () => set({ evoChallenge: null }),
 
   // ── Request Journey ──────────────────────────────────────────────
-  startJourney: () => set({ journeyStep: 0, journeyPlaying: true, selectedConceptId: null, layerFilter: null }),
+  startJourney: (id) => set((s) => ({ journeyId: id ?? s.journeyId, journeyStep: 0, journeyPlaying: true, selectedConceptId: null, layerFilter: null })),
+  setJourneyId: (id) => set({ journeyId: id, journeyStep: 0, journeyPlaying: false }),
   endJourney: () => set({ journeyStep: null, journeyPlaying: false }),
   journeyNext: () =>
     set((s) => {
       if (s.journeyStep === null) return s;
-      if (s.journeyStep >= JOURNEY.length - 1) return { journeyPlaying: false };
+      const j = JOURNEYS.find((j) => j.id === s.journeyId) ?? JOURNEYS[0];
+      if (s.journeyStep >= j.hops.length - 1) return { journeyPlaying: false };
       return { journeyStep: s.journeyStep + 1 };
     }),
   journeyPrev: () =>
@@ -242,12 +292,15 @@ export const useUniverse = create<UniverseState>((set) => ({
         : { journeyStep: Math.max(0, s.journeyStep - 1), journeyPlaying: false },
     ),
   setJourneyStep: (i) =>
-    set({ journeyStep: clamp(i, 0, JOURNEY.length - 1), journeyPlaying: false }),
+    set((s) => {
+      const j = JOURNEYS.find((j) => j.id === s.journeyId) ?? JOURNEYS[0];
+      return { journeyStep: clamp(i, 0, j.hops.length - 1), journeyPlaying: false };
+    }),
   toggleJourneyPlay: () =>
     set((s) => {
+      const j = JOURNEYS.find((j) => j.id === s.journeyId) ?? JOURNEYS[0];
       if (s.journeyStep === null) return { journeyStep: 0, journeyPlaying: true };
-      // Replay from the start if paused on the final hop.
-      if (!s.journeyPlaying && s.journeyStep >= JOURNEY.length - 1)
+      if (!s.journeyPlaying && s.journeyStep >= j.hops.length - 1)
         return { journeyStep: 0, journeyPlaying: true };
       return { journeyPlaying: !s.journeyPlaying };
     }),

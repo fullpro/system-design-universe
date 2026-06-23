@@ -444,6 +444,194 @@ const INFRA_CONCEPTS: Concept[] = [
     },
   },
 
+  // ───────────────────────────────────────── Read API
+  {
+    id: "read-api",
+    name: "Read API",
+    category: "application",
+    icon: "BookOpen",
+    tagline: "The fast path — serve reads without touching the write master.",
+    mentalModel: "The reference desk at a library — answers questions from copies and indexes, never disturbing the author at work.",
+    misconception: {
+      myth: "Reads and writes can share the same scaling strategy.",
+      reality: "Reads outnumber writes 10–100× in most systems. Separating them lets you cache, replicate and scale reads independently without complicating the write path.",
+    },
+    consequenceIfRemoved: "Every read hits the same path as writes, competing for write-master resources. Under load, reads starve or writes slow down — you can't tune either independently.",
+    definition:
+      "A dedicated API tier that handles all read (query) requests, pulling from caches and read replicas rather than the write master.",
+    whyItExists:
+      "Reads are the majority of traffic and tolerate slight staleness. Giving them their own path lets you optimise for latency (cache, replicas) without affecting write consistency.",
+    problemSolved:
+      "Prevents read traffic from competing with writes on the same database connection pool, and enables aggressive caching and replication on the read path alone.",
+    advantages: [
+      "Scales independently — add caches and replicas without touching the write path",
+      "Lower latency — reads served from memory or replicas, not the busy primary",
+      "Failure isolation — a read-path issue doesn't block writes",
+    ],
+    disadvantages: [
+      "Stale reads — caches and replicas lag behind the write master",
+      "More moving parts — cache invalidation and replication lag must be managed",
+      "Cross-cutting queries that join read and write data become harder",
+    ],
+    alternatives: [
+      { name: "Unified API", note: "One path for everything — simpler until scale forces a split" },
+      { name: "GraphQL", note: "Clients declare exactly the data they need; backend resolves read sources" },
+    ],
+    realWorld: [
+      "Twitter's read path serving timelines from Redis, not the write DB",
+      "E-commerce product pages served from read replicas + CDN",
+      "Search APIs backed by Elasticsearch, decoupled from the write store",
+    ],
+    interviewQuestions: [
+      "How do you handle a user reading their own write before the replica catches up?",
+      "When should a read bypass the cache and go straight to the database?",
+      "How do you decide the TTL for cached reads?",
+    ],
+    scaling:
+      "Add read replicas and cache layers horizontally. Because reads are stateless and tolerate staleness, you can scale them almost linearly — the write master is never the bottleneck for reads.",
+  },
+
+  // ───────────────────────────────────────── Write API
+  {
+    id: "write-api",
+    name: "Write API",
+    category: "application",
+    icon: "PenLine",
+    tagline: "The synchronous write path — validate, persist, confirm.",
+    mentalModel: "The bank teller — takes your deposit, records it in the ledger, and hands you a receipt before you leave.",
+    misconception: {
+      myth: "All writes need to be synchronous.",
+      reality: "Only writes where the caller needs immediate confirmation (e.g. payment) must be synchronous. Everything else can be queued and processed async for better throughput.",
+    },
+    consequenceIfRemoved: "No synchronous writes — the system can't confirm changes to the caller. Users get no receipt, no confirmation, no error feedback on their mutations.",
+    definition:
+      "A dedicated API tier that processes synchronous write (mutation) requests — validates input, persists to the write master, updates the cache, and returns a result.",
+    whyItExists:
+      "Some writes need an immediate answer: did the payment go through? Is the username taken? The synchronous write API guarantees the caller gets a definitive result before the connection closes.",
+    problemSolved:
+      "Gives callers immediate confirmation of writes while keeping the write path separate from reads so each can be scaled, rate-limited and monitored independently.",
+    advantages: [
+      "Immediate confirmation — the caller knows the write succeeded or failed",
+      "Can enforce strict validation and consistency on the write path",
+      "Separated from reads, so write-heavy spikes don't degrade query latency",
+    ],
+    disadvantages: [
+      "Slower than async — the caller blocks until the write is durable",
+      "Write master is a bottleneck — can't horizontally scale a single primary easily",
+      "Heavy writes can spike latency if not rate-limited",
+    ],
+    alternatives: [
+      { name: "Async write API", note: "Queue the write and confirm later — higher throughput, eventual confirmation" },
+      { name: "CQRS", note: "Formalise the read/write split with separate models and stores" },
+    ],
+    realWorld: [
+      "Stripe's payment API — synchronous because the caller needs the charge result",
+      "User registration — must confirm the username is available before proceeding",
+      "Inventory reservation — must atomically decrement stock and confirm",
+    ],
+    interviewQuestions: [
+      "When should a write be synchronous vs. async?",
+      "How do you handle a write that succeeds at the DB but the response is lost?",
+      "What consistency guarantee does the caller get from a synchronous write?",
+    ],
+    scaling:
+      "Vertical scale the write master as far as it goes, then shard by key. Rate-limit writes to protect the primary. Move non-critical side effects (emails, analytics) to the async path.",
+  },
+
+  // ───────────────────────────────────────── Write API Async
+  {
+    id: "write-api-async",
+    name: "Write API Async",
+    category: "application",
+    icon: "SendHorizonal",
+    tagline: "Accept now, process later — decouple the caller from the work.",
+    mentalModel: "The post office — you hand over the package and get a tracking number; delivery happens in the background.",
+    misconception: {
+      myth: "Async writes are unreliable because you don't wait for a result.",
+      reality: "The write is durably enqueued the moment you get an acknowledgement. The queue guarantees it will be processed — you've traded synchronous confirmation for throughput and resilience.",
+    },
+    consequenceIfRemoved: "Every write must be processed inline, blocking the caller. Spiky workloads overwhelm the system because there's no buffer to absorb bursts.",
+    definition:
+      "An API tier that accepts write requests, durably enqueues them, and returns immediately. Background workers drain the queue and do the actual processing.",
+    whyItExists:
+      "Many writes don't need instant results: sending emails, generating thumbnails, updating analytics. Accepting them into a queue and processing out-of-band smooths spikes and keeps the request path fast.",
+    problemSolved:
+      "Decouples the speed of acceptance from the speed of processing. The caller gets a fast acknowledgement; the system processes the work at its own pace without being overwhelmed by bursts.",
+    advantages: [
+      "Fast response — the caller doesn't wait for heavy processing",
+      "Absorbs traffic spikes — the queue buffers bursts that would overwhelm synchronous processing",
+      "Retry-friendly — failed processing can be retried from the queue without the caller re-submitting",
+    ],
+    disadvantages: [
+      "No immediate result — the caller only knows the write was accepted, not completed",
+      "Complexity — you need a queue, workers, dead-letter handling, and idempotency",
+      "Ordering — parallel workers may process messages out of order",
+    ],
+    alternatives: [
+      { name: "Synchronous write API", note: "Block until done — simpler when latency and throughput allow" },
+      { name: "Webhooks", note: "Notify the caller when async processing completes" },
+    ],
+    realWorld: [
+      "Video upload — accept the file, return a job ID, transcode in the background",
+      "Order placement — enqueue for fulfilment, email confirmation async",
+      "Bulk import — accept the CSV, process rows via workers, report progress",
+    ],
+    interviewQuestions: [
+      "How does the caller find out the async write finished?",
+      "What happens if a worker crashes mid-processing?",
+      "How do you guarantee exactly-once processing from a queue?",
+    ],
+    scaling:
+      "Add more workers to drain the queue faster. The queue itself scales by partitioning. Because workers are stateless consumers, horizontal scaling is straightforward — just add instances.",
+  },
+
+  // ───────────────────────────────────────── Worker Service
+  {
+    id: "worker-service",
+    name: "Worker Service",
+    category: "application",
+    icon: "Cog",
+    tagline: "The background crew — drains queues and does the heavy lifting.",
+    mentalModel: "The warehouse team — they unload the delivery trucks at their own pace, separate from the shop floor.",
+    misconception: {
+      myth: "Workers are just slower versions of the API.",
+      reality: "Workers are optimised for throughput, not latency. They batch, retry, and can take minutes per job — they're a fundamentally different execution model from request-response.",
+    },
+    consequenceIfRemoved: "Queued work piles up unprocessed. Async writes never complete, thumbnails never generate, emails never send — the queue grows until it hits its retention limit.",
+    definition:
+      "A pool of background processes that consume messages from a queue, perform the actual work (persist to NoSQL, send emails, generate reports), and acknowledge completion.",
+    whyItExists:
+      "Separating 'accept the request' from 'do the work' lets each scale independently. Workers can be CPU-heavy, slow, and bursty without affecting the user-facing API latency.",
+    problemSolved:
+      "Processes async work reliably at the system's own pace, independent of user-facing traffic. Failed jobs retry automatically; the queue guarantees nothing is silently dropped.",
+    advantages: [
+      "Independent scaling — add workers when the queue depth grows",
+      "Failure isolation — a crashing worker doesn't affect the API",
+      "Can be specialised — different worker pools for different job types",
+    ],
+    disadvantages: [
+      "Operational overhead — monitoring queue depth, dead letters, worker health",
+      "Latency is unbounded — processing time depends on queue depth and worker count",
+      "Idempotency required — workers must handle duplicate deliveries safely",
+    ],
+    alternatives: [
+      { name: "Serverless functions", note: "Auto-scaling workers triggered by queue events" },
+      { name: "Inline processing", note: "Do the work in the request path — simpler, but blocks the caller" },
+    ],
+    realWorld: [
+      "Celery workers processing Django background tasks",
+      "AWS Lambda triggered by SQS messages",
+      "Sidekiq workers handling Ruby on Rails background jobs",
+    ],
+    interviewQuestions: [
+      "How do you handle a worker that dies mid-job?",
+      "How do you scale workers based on queue pressure?",
+      "What's the difference between at-least-once and exactly-once processing?",
+    ],
+    scaling:
+      "Horizontal: spin up more worker instances. The queue is the backpressure signal — monitor depth and scale workers to keep it near zero. Use separate pools for different job priorities.",
+  },
+
   // ───────────────────────────────────────── Cache (Redis)
   {
     id: "cache",
@@ -952,6 +1140,55 @@ const INFRA_CONCEPTS: Concept[] = [
     },
   },
 
+  // ───────────────────────────────────────── Web Server
+  {
+    id: "web-server",
+    name: "Web Server",
+    category: "traffic",
+    icon: "Server",
+    tagline: "The single entry point that routes requests to specialized API tiers.",
+    mentalModel: "A receptionist in an office building — takes your request and directs you to the right desk (read requests to the read team, writes to the write team, async jobs to the queue).",
+    misconception: {
+      myth: "A web server is where you serve static files.",
+      reality: "In modern architectures, the web server is a routing layer — it forwards dynamic requests to backend APIs, not a file server. Static files go on a CDN.",
+    },
+    consequenceIfRemoved: "Every client has to know about and route to different API endpoints (reads here, writes there, async there). The system becomes fragmented and brittle.",
+    definition:
+      "A front-facing server that receives all requests from the load balancer and routes them to the appropriate backend API tier — read APIs, write APIs, or async work queues.",
+    whyItExists:
+      "Different request types have different optimisation needs. The web server unifies the client-facing interface while routing each request to the tier optimised for it.",
+    problemSolved:
+      "Provides a single, stable entry point that abstracts the backend's specialised API tiers, so clients don't need to know about the read/write/async split.",
+    advantages: [
+      "Clients see one unified API surface",
+      "Can route by request type (GET → read API, POST → write API, async tasks → queue)",
+      "Failure isolation — if the read API is slow, write requests still flow",
+      "Can apply cross-cutting concerns (auth, logging, rate limiting) once before routing",
+    ],
+    disadvantages: [
+      "Another hop in the request path adds latency",
+      "If the web server is down, nothing reaches the backends",
+      "Complex routing logic can become a bottleneck",
+    ],
+    alternatives: [
+      { name: "API Gateway", note: "Move routing logic into a gateway with more sophisticated rule matching" },
+      { name: "Service mesh", note: "Let sidecar proxies handle routing at the infrastructure level" },
+      { name: "Client-side routing", note: "Let clients decide which API to call — harder to maintain and scales poorly" },
+    ],
+    realWorld: [
+      "Nginx in front of multiple backend services",
+      "HAProxy directing requests based on URL patterns",
+      "A simple Node.js/Go reverse proxy routing /api/read → read tier, /api/write → write tier",
+    ],
+    interviewQuestions: [
+      "How do you route different request types to different backend tiers?",
+      "What happens if the web server goes down?",
+      "How do you handle authentication that needs to run before routing?",
+    ],
+    scaling:
+      "Horizontal: put the web server behind a load balancer to handle more concurrent connections. It's stateless, so each instance is identical. The load balancer scales it; the web server scales the backends through routing.",
+  },
+
   // ───────────────────────────────────────── Reverse Proxy
   {
     id: "reverse-proxy",
@@ -1362,6 +1599,56 @@ const INFRA_CONCEPTS: Concept[] = [
     ],
     scaling:
       "Binary, multiplexed RPC (gRPC over HTTP/2) keeps service-to-service traffic cheap — but because the calls look local, always wrap them in timeouts and circuit breakers.",
+  },
+
+  // ───────────────────────────────────────── Object Store
+  {
+    id: "object-store",
+    name: "Object Store",
+    category: "data",
+    icon: "Archive",
+    tagline: "Infinite shelf space for files, images and blobs.",
+    mentalModel: "A warehouse with infinite shelves — you give each item a label, drop it on a shelf, and retrieve it by label. No folders, no hierarchy, just keys and objects.",
+    misconception: {
+      myth: "Object storage is just a file system in the cloud.",
+      reality: "Object stores have no directory hierarchy, no in-place edits, and no file locking. They're optimised for massive parallelism and durability, not POSIX semantics.",
+    },
+    consequenceIfRemoved: "Large binary data (images, videos, backups, logs) has nowhere to go. You'd stuff blobs into the database, crushing its performance, or lose them entirely.",
+    definition:
+      "A flat-namespace storage service that stores arbitrary binary objects (files, images, videos, backups) addressed by key, with built-in replication and virtually unlimited capacity.",
+    whyItExists:
+      "Relational databases are terrible at storing large binary blobs — they bloat tables, slow backups, and waste expensive IOPS. Object stores are purpose-built for this: cheap, durable, and massively parallel.",
+    problemSolved:
+      "Provides a durable, highly available, virtually unlimited store for binary data, decoupled from the transactional database so neither degrades the other.",
+    advantages: [
+      "Virtually unlimited capacity — scales to exabytes",
+      "11 nines of durability — data is replicated across zones/regions",
+      "Cheap per GB compared to block or database storage",
+      "CDN-friendly — serve objects directly via signed URLs",
+    ],
+    disadvantages: [
+      "No partial updates — you must rewrite the entire object",
+      "Eventually consistent in some configurations (S3 was until 2020)",
+      "Higher latency than local disk or block storage for small reads",
+      "No query capability — you need the exact key to retrieve",
+    ],
+    alternatives: [
+      { name: "Database BLOBs", note: "Store in the DB — simpler but kills performance at scale" },
+      { name: "Block storage", note: "EBS/persistent disk — lower latency but limited capacity and tied to one VM" },
+      { name: "File storage (NFS/EFS)", note: "Shared filesystem — POSIX semantics but harder to scale" },
+    ],
+    realWorld: [
+      "AWS S3 storing images, backups and static assets",
+      "GCS serving ML training datasets",
+      "User-uploaded avatars stored in S3, served via CloudFront CDN",
+    ],
+    interviewQuestions: [
+      "When would you store data in an object store vs. a database?",
+      "How do you serve object-store files with low latency to end users?",
+      "How do you handle large file uploads reliably?",
+    ],
+    scaling:
+      "Object stores scale horizontally by design — the cloud provider handles partitioning and replication. Your job is key design (avoid hot prefixes) and lifecycle policies (move old objects to cold tiers).",
   },
 
   // ───────────────────────────────────────── NoSQL
