@@ -18,6 +18,11 @@ import {
   Unplug,
   ChevronDown,
   Dumbbell,
+  CircleCheck,
+  CircleSlash,
+  Link2,
+  BookOpen,
+  ExternalLink,
 } from "lucide-react";
 import { useUniverse } from "@/lib/store";
 import { getConcept } from "@/lib/concepts";
@@ -84,6 +89,7 @@ export function DetailPanel() {
   const mode = useUniverse((s) => s.mode);
   const closeDetail = useUniverse((s) => s.closeDetail);
   const zoomInto = useUniverse((s) => s.zoomInto);
+  const selectConcept = useUniverse((s) => s.selectConcept);
   const density = useUniverse((s) => s.lessonDensity);
   const setDensity = useUniverse((s) => s.setLessonDensity);
 
@@ -248,6 +254,29 @@ export function DetailPanel() {
                   </div>
                 </Section>
 
+                {(concept.whenToUse || concept.whenNotToUse) && (
+                  <Section title="When to use it" icon={<CircleCheck size={13} />} accent={accent} defaultOpen>
+                    <div className="space-y-2">
+                      {concept.whenToUse && (
+                        <div className="rounded-xl px-3 py-2" style={{ background: "rgba(52,211,153,0.07)", border: "1px solid rgba(52,211,153,0.22)" }}>
+                          <div className="mb-0.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--good)" }}>
+                            <CircleCheck size={11} /> Reach for it when
+                          </div>
+                          <p className="text-[12.5px] leading-snug" style={{ color: "var(--text)" }}>{concept.whenToUse}</p>
+                        </div>
+                      )}
+                      {concept.whenNotToUse && (
+                        <div className="rounded-xl px-3 py-2" style={{ background: "rgba(248,113,113,0.07)", border: "1px solid rgba(248,113,113,0.22)" }}>
+                          <div className="mb-0.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--bad)" }}>
+                            <CircleSlash size={11} /> Avoid it when
+                          </div>
+                          <p className="text-[12.5px] leading-snug" style={{ color: "var(--text)" }}>{concept.whenNotToUse}</p>
+                        </div>
+                      )}
+                    </div>
+                  </Section>
+                )}
+
                 <Section title="Alternatives" icon={<Shuffle size={13} />} accent={accent} defaultOpen={deep}>
                   <div className="space-y-2">
                     {concept.alternatives.map((alt) => (
@@ -288,6 +317,50 @@ export function DetailPanel() {
                     {concept.scaling}
                   </p>
                 </Section>
+
+                {concept.relatedConcepts && concept.relatedConcepts.length > 0 && (
+                  <Section title="Related concepts" icon={<Link2 size={13} />} accent={accent} defaultOpen>
+                    <div className="flex flex-wrap gap-1.5">
+                      {concept.relatedConcepts.map((rid) => {
+                        const rc = getConcept(rid);
+                        if (!rc) return null;
+                        const racc = CATEGORIES[rc.category].accent;
+                        return (
+                          <button
+                            key={rid}
+                            onClick={() => selectConcept(rid)}
+                            className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11.5px] font-medium transition-colors hover:bg-white/5"
+                            style={{ background: rgba(racc, 0.1), border: `1px solid ${rgba(racc, 0.28)}`, color: "var(--text)" }}
+                          >
+                            <Icon name={rc.icon} size={11} style={{ color: racc }} />
+                            {rc.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </Section>
+                )}
+
+                {concept.sources && concept.sources.length > 0 && (
+                  <Section title="Sources & further reading" icon={<BookOpen size={13} />} accent={accent} defaultOpen={deep}>
+                    <ul className="space-y-1.5">
+                      {concept.sources.map((src) => (
+                        <li key={src.url}>
+                          <a
+                            href={src.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="group flex items-start gap-2 text-[12px] leading-snug transition-colors hover:underline"
+                            style={{ color: "var(--text-dim)" }}
+                          >
+                            <ExternalLink size={12} className="mt-0.5 shrink-0" style={{ color: accent }} />
+                            <span>{src.label}</span>
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </Section>
+                )}
 
                 {/* Quick check — turns reading into recall before you move on. */}
                 {(() => {

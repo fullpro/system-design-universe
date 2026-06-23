@@ -34,6 +34,12 @@ export interface Alternative {
   note: string;
 }
 
+/** An authoritative reference for a concept (RFC, vendor docs, paper, eng blog). */
+export interface Source {
+  label: string;
+  url: string;
+}
+
 /** A single node inside a concept's "zoom-in" internal flow. */
 export interface InternalNode {
   id: string;
@@ -100,6 +106,14 @@ export interface Concept {
   misconception?: Misconception;
   /** What concretely breaks if this component is removed. */
   consequenceIfRemoved?: string;
+  /** Explicit guidance: the situations this is the right tool for. */
+  whenToUse?: string;
+  /** Explicit guidance: when reaching for this is a mistake. */
+  whenNotToUse?: string;
+  /** Ids of related concepts, rendered as cross-link chips. */
+  relatedConcepts?: string[];
+  /** Authoritative references (RFCs, vendor docs, papers). */
+  sources?: Source[];
   /** Optional internal architecture revealed when the user zooms in. */
   internal?: InternalFlow;
 }

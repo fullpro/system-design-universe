@@ -1196,39 +1196,57 @@ const INFRA_CONCEPTS: Concept[] = [
     category: "edge",
     icon: "Shuffle",
     tagline: "A shield and switchboard in front of servers.",
+    mentalModel: "The receptionist at a corporate front desk — visitors only ever talk to the desk, which checks them in, hands out badges, and routes them to the right office. They never see the building's interior.",
+    misconception: {
+      myth: "A reverse proxy and a load balancer are different products you buy separately.",
+      reality: "They're roles, not products. The same software — Nginx, HAProxy, Envoy — does both. A reverse proxy fronts and shields backends; a load balancer spreads traffic across a pool. Most deployments do both at once.",
+    },
+    consequenceIfRemoved: "Every backend is exposed directly to the internet and must terminate its own TLS, do its own compression, and be addressable by clients. Topology leaks to the outside world, and edge concerns get duplicated into every service.",
     definition:
-      "A server that sits in front of backends and forwards client requests to them, handling TLS, caching, compression and routing along the way.",
+      "A server that sits in front of one or more backends, accepting client connections on their behalf and forwarding requests — terminating TLS, caching, compressing, and routing by path or host along the way.",
     whyItExists:
-      "You want a single hardened entry point that hides backend topology and centralises concerns like TLS termination and static caching, separate from app logic.",
+      "Edge concerns — TLS handshakes, gzip/Brotli compression, static caching, request routing — are identical across every backend and have nothing to do with business logic. Centralising them in one hardened tier keeps app servers simple and hides the internal topology behind a single public address.",
     problemSolved:
-      "Centralises edge concerns (TLS, compression, caching, routing) and shields backends from direct exposure to the internet.",
+      "Gives you one controllable choke point for TLS termination, compression, caching, header rewriting and routing — and shields backends, which can now speak plaintext on a private network and never face the public internet directly.",
     advantages: [
-      "TLS termination and compression in one place",
-      "Hides and protects backend servers",
-      "Can cache and serve static content directly",
+      "Terminates TLS once at the edge, so backends speak cheap plaintext on a trusted network instead of each paying the handshake cost",
+      "Hides backend topology behind one address — you can move, rename or rescale servers without clients noticing",
+      "Offloads static caching and compression from app servers, cutting both their CPU load and response bytes",
+      "A natural place to enforce cross-cutting policy: rate limits, IP allow-lists, request-size caps, header sanitisation",
     ],
     disadvantages: [
-      "Another hop and another component to operate",
-      "Misconfiguration can expose or break routing",
-      "Can become a bottleneck if under-provisioned",
+      "Adds a network hop and a component that must itself be made highly available — it's now in the critical path of every request",
+      "Becomes a single point of failure and a potential bottleneck if under-provisioned or not itself load-balanced",
+      "Routing/TLS misconfiguration is high-blast-radius: one bad rule can break or expose every backend behind it",
+      "Terminating TLS here means traffic to backends is plaintext — fine on a private network, a risk on a shared one",
     ],
+    whenToUse:
+      "Almost always, the moment you have more than one backend or want TLS, caching and routing handled outside app code. Essential for hiding internal services and presenting a single public entry point.",
+    whenNotToUse:
+      "A single small service with TLS handled by the platform (e.g. a managed PaaS or serverless function) may not need its own proxy — the platform already is one. Don't add a self-managed proxy tier you then have to keep highly available for no real gain.",
     alternatives: [
-      { name: "API Gateway", note: "Reverse proxy + API-aware features" },
-      { name: "Load balancer", note: "Overlapping roles, different focus" },
-      { name: "Service mesh", note: "Proxying pushed to sidecars" },
+      { name: "API Gateway", note: "A reverse proxy plus API-aware features (auth, quotas, request shaping)" },
+      { name: "Load balancer", note: "Same software, different emphasis — spreading load over a pool" },
+      { name: "Service mesh", note: "Pushes proxying into per-pod sidecars for east-west traffic" },
     ],
     realWorld: [
-      "Nginx / Envoy / HAProxy at the edge",
-      "Cloudflare acting as a global reverse proxy",
-      "TLS termination before plaintext to internal services",
+      "Nginx, HAProxy and Envoy deployed as the edge tier in front of app fleets",
+      "Cloudflare acting as a global reverse proxy, terminating TLS and caching at 300+ POPs",
+      "TLS terminated at the proxy, plaintext HTTP/2 to internal services over a private network",
     ],
     interviewQuestions: [
-      "Forward proxy vs reverse proxy?",
-      "Reverse proxy vs load balancer vs API gateway?",
-      "Where do you terminate TLS, and why?",
+      "Forward proxy vs reverse proxy — who is each one hiding, the client or the server?",
+      "Reverse proxy vs load balancer vs API gateway — where do the roles overlap?",
+      "Where would you terminate TLS, and what's the security tradeoff of terminating it at the edge?",
     ],
     scaling:
-      "Reverse proxies are stateless and scale horizontally trivially. They're often the same software (Nginx/Envoy) that also does load balancing — the distinction is about role, not binary.",
+      "Reverse proxies are stateless, so they scale horizontally trivially — put several behind a load balancer (or anycast) and they share the load. The same Nginx/Envoy binary often does the load balancing too; the labels describe roles, not separate machines.",
+    relatedConcepts: ["load-balancer", "api-gateway", "cdn", "http", "rate-limiting"],
+    sources: [
+      { label: "NGINX — What Is a Reverse Proxy Server?", url: "https://www.nginx.com/resources/glossary/reverse-proxy-server/" },
+      { label: "Cloudflare — Reverse proxy vs. forward proxy", url: "https://www.cloudflare.com/learning/cdn/glossary/reverse-proxy/" },
+      { label: "Envoy Proxy — Architecture overview", url: "https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/arch_overview" },
+    ],
   },
 
   // ───────────────────────────────────────── Kubernetes
@@ -1334,39 +1352,57 @@ const INFRA_CONCEPTS: Concept[] = [
     category: "scalability",
     icon: "GitFork",
     tagline: "Separate the read model from the write model.",
+    mentalModel: "A restaurant kitchen vs. its menu. The kitchen (write side) is organised for cooking — raw ingredients, strict process, integrity. The menu (read side) is organised for the diner — denormalised, pretty, instant to scan. Forcing one layout to serve both makes both worse.",
+    misconception: {
+      myth: "CQRS means you need two databases and event sourcing.",
+      reality: "CQRS is just separating the read model from the write model — it can be two classes against one database. Two datastores and event sourcing are an optional, heavier extreme of the same idea, not a requirement.",
+    },
+    consequenceIfRemoved: "Reads and writes share one schema, so every read query is shaped by write-side normalisation. Complex read screens need expensive multi-table joins, and you can't scale or denormalise the read path without risking write integrity.",
     definition:
-      "Command Query Responsibility Segregation splits writes (commands) and reads (queries) into separate models, each optimised for its job.",
+      "Command Query Responsibility Segregation splits the write model (commands that change state) from the read model (queries that return it), so each can use a schema, store and scaling strategy tuned for its own job.",
     whyItExists:
-      "Reads and writes often have opposite needs — writes want normalised integrity, reads want denormalised speed. CQRS stops one compromise from hobbling both.",
+      "Reads and writes pull schemas in opposite directions: writes want normalised, constraint-enforced tables for integrity; reads want flat, denormalised, pre-joined shapes for speed. In one model every change is a compromise. CQRS removes the compromise by letting each side evolve on its own.",
     problemSolved:
-      "Lets reads and writes scale and evolve independently, with read models shaped precisely for query patterns.",
+      "Lets the read and write sides scale, deploy and model data independently — read models can be denormalised and replicated for query speed without weakening the authoritative, consistent write side.",
     advantages: [
-      "Read and write paths scale independently",
-      "Read models tailored to exact query needs",
-      "Pairs naturally with event sourcing",
+      "Read and write paths scale independently — and read volume is often 10–100× writes, so this is exactly where you want the freedom",
+      "Read models are pre-shaped to query patterns, turning expensive runtime joins into cheap key lookups",
+      "Write side stays small, normalised and easy to reason about for correctness and auditing",
+      "Composes naturally with event sourcing and materialized views when you do need the heavier version",
     ],
     disadvantages: [
-      "Eventual consistency between the two models",
-      "More moving parts and code to maintain",
-      "Overkill for simple CRUD apps",
+      "The read model lags the write model — you inherit eventual consistency and must design the UI to tolerate 'read-your-own-write' gaps",
+      "More moving parts: a sync mechanism (events, CDC, or replication) plus two models to keep correct and deploy",
+      "Genuinely overkill for simple CRUD — the synchronisation cost buys nothing if reads and writes have the same shape",
+      "Debugging spans two models; a stale read can mean a projection bug, not a write bug",
     ],
+    whenToUse:
+      "When the read and write workloads diverge sharply — very high read:write ratios, complex read screens that need different shapes than the write schema, or a write side that demands strict auditing while reads can tolerate slight staleness.",
+    whenNotToUse:
+      "For straightforward CRUD where reads and writes share the same shape, or when your team can't absorb eventual consistency. Reach for read replicas or materialized views first — they scale reads without a second model.",
     alternatives: [
-      { name: "Single model CRUD", note: "Simplest; fine for most apps" },
-      { name: "Read replicas", note: "Scale reads without two models" },
-      { name: "Materialized views", note: "Precomputed reads in the DB" },
+      { name: "Single-model CRUD", note: "Simplest; correct default for the vast majority of apps" },
+      { name: "Read replicas", note: "Scale reads with the same schema — no second model to sync" },
+      { name: "Materialized views", note: "Precomputed read shapes maintained inside the database" },
     ],
     realWorld: [
-      "Event-sourced systems with projected read models",
-      "High-read dashboards fed by a write-side stream",
-      "Order systems separating placement from queries",
+      "Event-sourced systems projecting events into purpose-built read models",
+      "High-read dashboards fed by a denormalised projection of a write-side stream",
+      "Order systems separating placement (command) from order-history queries",
     ],
     interviewQuestions: [
-      "When is CQRS worth the complexity?",
-      "How do you keep read and write models in sync?",
-      "How does CQRS relate to event sourcing?",
+      "When is CQRS worth its synchronisation cost — and when is it cargo-culting?",
+      "How do you keep the read and write models in sync, and what consistency do you get?",
+      "How does CQRS relate to event sourcing — and why are they often confused?",
     ],
     scaling:
-      "CQRS lets you scale the read side (often 100x the write volume) independently — replicate and denormalise read models freely while keeping writes authoritative and consistent.",
+      "CQRS lets you scale the read side — often 10–100× the write volume — independently: replicate and denormalise read models freely while a single authoritative write model preserves consistency. The sync pipeline (events or CDC) becomes the thing you must keep healthy.",
+    relatedConcepts: ["read-replica", "denormalization", "message-queue", "consistency-models", "database"],
+    sources: [
+      { label: "Martin Fowler — CQRS", url: "https://martinfowler.com/bliki/CQRS.html" },
+      { label: "Microsoft Azure — CQRS pattern", url: "https://learn.microsoft.com/en-us/azure/architecture/patterns/cqrs" },
+      { label: "Microsoft Azure — Materialized View pattern", url: "https://learn.microsoft.com/en-us/azure/architecture/patterns/materialized-view" },
+    ],
   },
 
   // ───────────────────────────────────────── TCP
@@ -1440,39 +1476,57 @@ const INFRA_CONCEPTS: Concept[] = [
     category: "networking",
     icon: "Radio",
     tagline: "Fire and forget — speed over guarantees.",
+    mentalModel: "Shouting across a noisy room. You say it once and move on — no waiting for confirmation. Most of it gets through; if a word is lost, it's already too late to matter, so you don't stop to repeat it.",
+    misconception: {
+      myth: "UDP is unreliable, so serious systems avoid it.",
+      reality: "UDP is the foundation of some of the most demanding systems on the internet — DNS, video calls, and (via QUIC) HTTP/3. It isn't 'worse' than TCP; it hands reliability to the application so latency-sensitive workloads only pay for the guarantees they actually need.",
+    },
+    consequenceIfRemoved: "Latency-sensitive workloads would be forced onto TCP, where a single lost packet stalls the whole stream (head-of-line blocking) while it's retransmitted — fatal for live audio, video and games where a fresh packet matters more than a recovered stale one.",
     definition:
-      "UDP is a connectionless transport that sends datagrams with no handshake, ordering, or delivery guarantees — minimal overhead, minimal latency.",
+      "UDP is a connectionless transport that sends independent datagrams with no handshake, ordering, retransmission or congestion control — just a tiny header over best-effort IP, trading guarantees for minimal overhead and latency.",
     whyItExists:
-      "Some workloads (live audio, video, games) would rather have a fresh packet now than a retransmitted stale one. UDP simply gets out of the way.",
+      "For live audio, video and games, a retransmitted stale packet is useless — by the time it arrives, the moment has passed. TCP's insistence on in-order, guaranteed delivery actively hurts these workloads. UDP gets out of the way and lets the application decide what's worth recovering.",
     problemSolved:
-      "Removes the latency and overhead of reliability when the application can tolerate loss — or handle it itself.",
+      "Removes the latency and per-connection overhead of reliability for workloads that can tolerate loss — or that implement exactly the reliability they need at the application layer (as QUIC does).",
     advantages: [
-      "Lowest latency — no handshake or ACKs",
-      "Supports broadcast and multicast",
-      "Tiny header, stateless on the server",
+      "Lowest possible latency — no handshake round-trip and no waiting on ACKs before sending the next datagram",
+      "No head-of-line blocking: one lost datagram never stalls the others, which is decisive for real-time media",
+      "Stateless on the server with a tiny 8-byte header, so a server can fan out to huge numbers of clients cheaply",
+      "Supports broadcast and multicast — one send reaching many receivers",
     ],
     disadvantages: [
-      "No delivery or ordering guarantees",
-      "The app must cope with loss and reordering",
-      "Often throttled or blocked by firewalls",
+      "No delivery, ordering, or duplicate protection — the application must detect and handle loss and reordering itself",
+      "No built-in congestion control, so naïve UDP can flood a network and harm other traffic (you must add it, as QUIC does)",
+      "Frequently throttled, rate-limited or blocked by firewalls and NATs that assume TCP",
+      "Easier to spoof and amplify — a common vector for reflection DDoS attacks",
     ],
+    whenToUse:
+      "Real-time media (VoIP, video conferencing, live streaming), online games, and small idempotent request/response like DNS — anywhere a fresh-but-lossy packet beats a guaranteed-but-late one, or where you'll build custom reliability on top (QUIC).",
+    whenNotToUse:
+      "Anything that needs every byte in order — file transfer, database connections, web pages, payments. Reach for TCP (or QUIC) rather than reinventing retransmission, ordering and congestion control yourself.",
     alternatives: [
-      { name: "TCP", note: "Reliability and ordering" },
-      { name: "QUIC", note: "Reliability with UDP's speed" },
-      { name: "App-level acks", note: "Add just the reliability you need" },
+      { name: "TCP", note: "Reliability and ordering when every byte must arrive" },
+      { name: "QUIC", note: "Reliable, multiplexed streams built on UDP — no HOL blocking" },
+      { name: "App-level ACKs", note: "Add back exactly the reliability you need, nothing more" },
     ],
     realWorld: [
-      "VoIP, video conferencing, live streaming",
-      "Online multiplayer games",
-      "DNS queries (small, retryable)",
+      "VoIP, video conferencing and live streaming (often via RTP/WebRTC)",
+      "Online multiplayer games sending frequent positional updates",
+      "DNS queries — small, idempotent, cheaply retried; and QUIC/HTTP-3 underneath",
     ],
     interviewQuestions: [
-      "UDP vs TCP — the core tradeoff?",
-      "Why does DNS use UDP?",
-      "How do real-time games cope with packet loss?",
+      "UDP vs TCP — what's the core tradeoff, and who pays for reliability in each?",
+      "Why does DNS use UDP by default, and when does it fall back to TCP?",
+      "How do real-time games and QUIC cope with packet loss without TCP?",
     ],
     scaling:
-      "Stateless datagrams scale trivially — there's no per-connection state on the server — so pair UDP with application-level reliability only where it's actually needed.",
+      "Stateless datagrams scale trivially — no per-connection state means one server can serve enormous client counts — but you must add congestion control yourself to be a good network citizen, and layer application-level reliability only where it's truly needed.",
+    relatedConcepts: ["tcp", "dns", "http", "back-pressure"],
+    sources: [
+      { label: "RFC 768 — User Datagram Protocol", url: "https://www.rfc-editor.org/rfc/rfc768" },
+      { label: "Cloudflare — What is UDP?", url: "https://www.cloudflare.com/learning/ddos/glossary/user-datagram-protocol-udp/" },
+      { label: "RFC 9000 — QUIC (reliability over UDP)", url: "https://www.rfc-editor.org/rfc/rfc9000" },
+    ],
   },
 
   // ───────────────────────────────────────── HTTP
@@ -1482,39 +1536,57 @@ const INFRA_CONCEPTS: Concept[] = [
     category: "networking",
     icon: "ArrowLeftRight",
     tagline: "The request/response language of the web.",
+    mentalModel: "A formal letter exchange. Each request is a self-contained envelope — a verb (what to do), an address (the URL), headers (metadata), and a body. The server replies with a status code and its own letter. Neither side remembers the last exchange unless you enclose an ID (a cookie or token).",
+    misconception: {
+      myth: "HTTP is slow and text-based, so it's a poor fit for high-performance systems.",
+      reality: "That describes HTTP/1.1. HTTP/2 multiplexes many streams over one binary connection, and HTTP/3 runs over QUIC (UDP) to kill head-of-line blocking. Modern HTTP carries gRPC, video and real-time traffic at scale.",
+    },
+    consequenceIfRemoved: "There would be no shared contract for the web — every client and server pair would invent its own request format, and the entire ecosystem of caches, proxies, CDNs and browsers (all of which understand HTTP semantics) would have nothing to reason about.",
     definition:
-      "HTTP is a stateless request/response protocol (traditionally over TCP; HTTP/3 runs over QUIC) where verbs — GET, POST, PUT, PATCH, DELETE — act on resources identified by URLs, with status codes and headers conveying semantics.",
+      "HTTP is a stateless request/response protocol — traditionally over TCP, with HTTP/3 over QUIC — where verbs (GET, POST, PUT, PATCH, DELETE) act on resources identified by URLs, and status codes plus headers carry the semantics of each exchange.",
     whyItExists:
-      "Clients and servers need a shared, extensible contract for requesting and manipulating resources. HTTP is that lingua franca of the web.",
+      "Clients and servers built by different people need one shared, extensible contract for requesting and manipulating resources. HTTP is that lingua franca — and because every proxy, cache and CDN understands it, an enormous infrastructure can act on requests without knowing the application.",
     problemSolved:
-      "Standardises how the web exchanges documents and data, with caching, status codes and content negotiation built in.",
+      "Standardises how the web exchanges documents and data, with caching, status codes, content negotiation and a uniform method vocabulary built in — so intermediaries can cache, route and secure traffic generically.",
     advantages: [
-      "Universal and well understood",
-      "GETs are cacheable end to end",
-      "Rich semantics: verbs, status codes, headers",
+      "Universal and intermediary-friendly: caches, proxies and CDNs all understand its verbs and headers, so they can act on traffic without app knowledge",
+      "Safe (GET/HEAD) and idempotent (GET/PUT/DELETE) method semantics let infrastructure retry and cache correctly",
+      "Cache-Control, ETags and conditional requests enable end-to-end caching that keeps most reads off the origin",
+      "Extensible by design — new headers, methods and versions (H2, H3) layer in without breaking older clients",
     ],
     disadvantages: [
-      "Stateless — state must live in cookies/tokens",
-      "Verbose headers on every request",
-      "Request/response only (no native push pre-HTTP/2)",
+      "Statelessness means session state must be carried explicitly in every request via cookies or tokens",
+      "Per-request header overhead is real on HTTP/1.1 (mitigated by HPACK/QPACK header compression in H2/H3)",
+      "Classic request/response shape fits poorly for server-initiated push and real-time streams (hence WebSockets / SSE)",
+      "Easy to misuse the semantics — non-idempotent GETs or uncacheable responses quietly break caches and retries",
     ],
+    whenToUse:
+      "The default for virtually all client-server and service-to-service communication on the web — REST APIs, gRPC (over H2), browser traffic. If a request maps to 'do something to a resource and get a response', HTTP fits.",
+    whenNotToUse:
+      "For low-latency, server-pushed, bidirectional streams (live collaboration, trading tickers), reach for WebSockets or SSE. For internal high-throughput RPC you may prefer gRPC's binary contract — though it still rides on HTTP/2.",
     alternatives: [
-      { name: "WebSockets", note: "Full-duplex, persistent" },
-      { name: "gRPC", note: "Binary RPC over HTTP/2" },
-      { name: "HTTP/3", note: "HTTP over QUIC, no HOL blocking" },
+      { name: "WebSockets", note: "Full-duplex, persistent connection for real-time, bidirectional data" },
+      { name: "gRPC", note: "Typed binary RPC layered on HTTP/2" },
+      { name: "Server-Sent Events", note: "One-way server→client streaming over plain HTTP" },
     ],
     realWorld: [
-      "Every REST API on the internet",
-      "HTTP/2 multiplexing many streams per connection",
-      "Cache-Control driving CDN behaviour",
+      "Every REST and GraphQL API on the public internet",
+      "HTTP/2 multiplexing many concurrent streams over one TCP connection",
+      "Cache-Control and ETags driving CDN and browser caching behaviour",
     ],
     interviewQuestions: [
-      "Idempotent vs safe methods — which are which?",
-      "What makes an HTTP response cacheable?",
-      "PUT vs PATCH — what's the difference?",
+      "Safe vs idempotent methods — which verbs are which, and why does it matter for retries?",
+      "What exactly makes an HTTP response cacheable, and who honors those headers?",
+      "PUT vs PATCH vs POST — semantics and idempotency of each?",
     ],
     scaling:
-      "HTTP's statelessness is exactly what makes the app tier horizontally scalable; lean on caching headers and CDNs so most requests never reach your origin.",
+      "HTTP's statelessness is precisely what makes the app tier horizontally scalable — any server can answer any request. Lean on cache headers, CDNs and HTTP/2 multiplexing so most requests are served at the edge and never reach your origin.",
+    relatedConcepts: ["rest", "tcp", "cdn", "cache", "reverse-proxy", "rpc"],
+    sources: [
+      { label: "MDN — HTTP overview", url: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Overview" },
+      { label: "RFC 9110 — HTTP Semantics", url: "https://www.rfc-editor.org/rfc/rfc9110" },
+      { label: "Cloudflare — HTTP/1 vs HTTP/2 vs HTTP/3", url: "https://www.cloudflare.com/learning/performance/http2-vs-http1.1/" },
+    ],
   },
 
   // ───────────────────────────────────────── REST
@@ -1524,39 +1596,57 @@ const INFRA_CONCEPTS: Concept[] = [
     category: "networking",
     icon: "Route",
     tagline: "Resources, verbs, and statelessness.",
+    mentalModel: "A well-organised library. Everything is a thing (a resource) with a stable address (the URL), and you act on it with a small, fixed set of verbs — fetch it, add one, replace it, remove it. Once you know how to check out one book, you know how to check out every book.",
+    misconception: {
+      myth: "Any JSON-over-HTTP API is RESTful.",
+      reality: "Most 'REST' APIs are really HTTP RPC. True REST (per Fielding) requires resource modelling, correct verb/status semantics, statelessness and ideally HATEOAS. The industry uses 'REST' loosely to mean 'resource-ish JSON over HTTP' — useful, but not the formal definition.",
+    },
+    consequenceIfRemoved: "Without a shared convention, every endpoint becomes a bespoke contract a client must learn individually — no predictable verbs, no free HTTP caching, and tight coupling between client and server internals.",
     definition:
-      "REST is an architectural style for APIs that models everything as resources addressed by URIs and manipulated with standard HTTP verbs, with each request carrying all the state it needs.",
+      "REST is an architectural style for APIs that models everything as resources addressed by URIs and manipulated with standard HTTP verbs, where each request is stateless — carrying all the context the server needs to process it.",
     whyItExists:
-      "APIs needed a uniform, predictable convention so clients could consume them without bespoke per-endpoint contracts. REST leans on HTTP's existing semantics to provide it.",
+      "APIs needed a uniform, predictable convention so clients could consume them without learning a bespoke contract per endpoint. Rather than invent a new protocol, REST leans on HTTP's existing semantics — verbs, status codes, caching — so the whole web infrastructure already understands it.",
     problemSolved:
-      "Gives teams a consistent, cacheable, evolvable way to expose data over HTTP without tightly coupling clients to server internals.",
+      "Gives teams a consistent, cacheable, evolvable way to expose data over HTTP without coupling clients to server internals — learn the conventions once and every endpoint behaves predictably.",
     advantages: [
-      "Uniform and predictable interface",
-      "GETs are cacheable for free",
-      "Clients decoupled from server implementation",
+      "Uniform interface: because every resource follows the same verb conventions, a client that learns one endpoint can predict the rest",
+      "GET responses are cacheable by the entire HTTP stack (browser, CDN, proxy) when you set cache headers correctly — caching the network already understands",
+      "Statelessness lets any server answer any request, so the API tier scales horizontally with no session affinity",
+      "Loose coupling: clients depend on the resource contract, not on how the server stores or computes the data",
     ],
     disadvantages: [
-      "Over- and under-fetching of data",
-      "Many round trips for related resources",
-      "No strict, machine-checked contract by default",
+      "Over- and under-fetching: a fixed resource shape often returns more than a screen needs, or too little — forcing extra calls",
+      "Related data means many round trips (the classic N+1 'fetch a list, then fetch each item'), painful on high-latency links",
+      "No strict, machine-checked contract by default — drift between client and server is caught at runtime unless you add OpenAPI",
+      "Mapping rich actions (\"refund this\", \"retry that\") onto CRUD verbs is often awkward and leads to RPC-in-disguise endpoints",
     ],
+    whenToUse:
+      "Public and partner APIs, CRUD-shaped resources, and anything that benefits from HTTP caching and broad client compatibility. The safe default when you want maximum interoperability and a low barrier for consumers.",
+    whenNotToUse:
+      "When clients need to shape exactly what they fetch (reach for GraphQL), for chatty internal service-to-service calls where a typed binary contract matters (gRPC), or for action-heavy domains that fight the resource/verb model.",
     alternatives: [
-      { name: "GraphQL", note: "Client shapes exactly what it needs" },
-      { name: "gRPC", note: "Typed, binary, action-oriented" },
-      { name: "RPC", note: "Call remote actions directly" },
+      { name: "GraphQL", note: "Client specifies exactly the fields it needs in one round trip" },
+      { name: "gRPC", note: "Typed, binary, action-oriented — great for internal east-west traffic" },
+      { name: "RPC", note: "Call remote actions directly when the domain is verbs, not nouns" },
     ],
     realWorld: [
-      "Stripe, GitHub, Twitter public APIs",
-      "CRUD over HTTP in virtually every web app",
-      "Resource URLs + verbs + JSON payloads",
+      "Stripe, GitHub and Twilio public APIs (resource URLs + verbs + JSON)",
+      "CRUD over HTTP in virtually every web and mobile backend",
+      "OpenAPI/Swagger specs adding a machine-checked contract on top",
     ],
     interviewQuestions: [
-      "REST vs RPC vs GraphQL — when each?",
-      "What actually makes an API RESTful?",
-      "How do you version a REST API?",
+      "REST vs RPC vs GraphQL — what does each optimise for, and when would you pick each?",
+      "What actually makes an API RESTful — and why are most 'REST' APIs really HTTP RPC?",
+      "How do you version a REST API without breaking existing clients?",
     ],
     scaling:
-      "Statelessness lets any server answer any request, so REST APIs scale horizontally with ease — pair with caching and pagination to handle read-heavy traffic.",
+      "Statelessness lets any server answer any request, so REST APIs scale horizontally with ease. Pair with HTTP caching, pagination and conditional requests (ETags) to absorb read-heavy traffic before it reaches your origin.",
+    relatedConcepts: ["http", "rpc", "api-gateway", "cache", "client"],
+    sources: [
+      { label: "Roy Fielding — Architectural Styles (REST, Ch. 5)", url: "https://ics.uci.edu/~fielding/pubs/dissertation/rest_arch_style.htm" },
+      { label: "MDN — REST", url: "https://developer.mozilla.org/en-US/docs/Glossary/REST" },
+      { label: "Microsoft — REST API design best practices", url: "https://learn.microsoft.com/en-us/azure/architecture/best-practices/api-design" },
+    ],
   },
 
   // ───────────────────────────────────────── RPC
@@ -1566,39 +1656,57 @@ const INFRA_CONCEPTS: Concept[] = [
     category: "networking",
     icon: "Webhook",
     tagline: "Call a remote function like a local one.",
+    mentalModel: "A walkie-talkie with a shared codebook. You both agreed in advance on exactly what messages mean (the schema), so you can bark a short command and get a precise reply — fast and unambiguous, but only because you pre-shared the codebook.",
+    misconception: {
+      myth: "Because the call looks like a local function, you can treat it like one.",
+      reality: "That's RPC's most dangerous feature. A local call can't take 2 seconds, vanish, or half-succeed — a remote one can. The syntactic sugar hides latency, partial failure and retries, so RPC calls must always be wrapped in timeouts, retries with backoff and circuit breakers.",
+    },
+    consequenceIfRemoved: "Service-to-service communication falls back to hand-rolled HTTP+JSON with no shared types or codegen — more boilerplate, looser contracts, larger payloads, and drift between caller and callee caught only at runtime.",
     definition:
-      "Remote Procedure Call makes invoking a remote service look like a local function call — arguments are marshalled, sent, executed remotely, and the result returned, usually over a typed, binary contract.",
+      "Remote Procedure Call makes invoking a remote service look like a local function call — arguments are serialized (marshalled), sent over the network, executed remotely, and the result returned — usually over a typed, compact, binary contract with generated client/server stubs.",
     whyItExists:
-      "Services need to invoke each other's behaviour, not just shuffle resources around. RPC frames that as typed actions with generated client/server stubs.",
+      "Services need to invoke each other's behaviour, not just exchange resources. RPC frames inter-service communication as typed actions with generated stubs, so calling another service feels like calling a library — with a compact wire format tuned for high-volume internal traffic.",
     problemSolved:
-      "Provides efficient, strongly-typed, action-oriented service-to-service calls, often with code generation and compact binary encoding.",
+      "Provides efficient, strongly-typed, action-oriented service-to-service calls with code generation and compact binary encoding — ideal for the high-frequency east-west traffic inside a microservice mesh.",
     advantages: [
-      "Compact and fast (binary, e.g. Protobuf)",
-      "Strongly-typed contracts with codegen",
-      "Natural fit for actions and commands",
+      "Compact binary encoding (e.g. Protobuf) is far smaller and faster to parse than JSON — meaningful at internal call volumes",
+      "Strongly-typed schema with codegen catches contract mismatches at build time, not in production",
+      "Natural fit for actions/commands (\"charge card\", \"resize image\") that map awkwardly onto REST nouns",
+      "Streaming and multiplexing come free via HTTP/2 (gRPC), so many calls share one connection",
     ],
     disadvantages: [
-      "Tighter coupling to the shared contract",
-      "Less cache-friendly than REST",
-      "Hides the network — failures look like function calls",
+      "Tighter coupling: caller and callee must share and co-evolve the contract, so versioning needs discipline",
+      "Less cache- and proxy-friendly than REST — the binary payloads aren't something a generic HTTP cache can reason about",
+      "Hides the network: failures, latency and partial success look like ordinary function calls, inviting fragile code",
+      "Harder to debug by hand (binary, not curl-able) and less accessible to browser clients without a proxy (gRPC-Web)",
     ],
+    whenToUse:
+      "Internal, high-throughput service-to-service traffic where you control both ends, want typed contracts, and care about latency and payload size — the backbone of most microservice meshes.",
+    whenNotToUse:
+      "For public APIs (REST/GraphQL are friendlier to unknown clients and browsers), for cache-heavy read paths, or when loose coupling matters more than raw efficiency. Don't expose RPC directly to the open internet without a gateway.",
     alternatives: [
-      { name: "REST", note: "Resource-oriented, cacheable" },
-      { name: "GraphQL", note: "Flexible client-driven queries" },
-      { name: "Message queue", note: "Async, decoupled in time" },
+      { name: "REST", note: "Resource-oriented and cacheable — better for public, browser-facing APIs" },
+      { name: "GraphQL", note: "Flexible client-driven queries over one endpoint" },
+      { name: "Message queue", note: "Async and decoupled in time when you don't need an immediate reply" },
     ],
     realWorld: [
-      "gRPC, Thrift, and Twirp in microservice meshes",
-      "Internal east-west traffic at scale",
-      "HTTP/2 multiplexing many RPCs per connection",
+      "gRPC, Thrift and Twirp powering internal microservice meshes",
+      "High-volume east-west traffic where payload size and latency dominate",
+      "HTTP/2 multiplexing many concurrent RPCs over a single connection",
     ],
     interviewQuestions: [
-      "RPC vs REST — when would you pick each?",
-      "How does gRPC leverage HTTP/2?",
-      "What's the danger of making remote calls look local?",
+      "RPC vs REST — what does each optimise for, and where does the boundary sit?",
+      "How does gRPC leverage HTTP/2 for multiplexing and streaming?",
+      "What's the danger of making remote calls look local, and how do you guard against it?",
     ],
     scaling:
-      "Binary, multiplexed RPC (gRPC over HTTP/2) keeps service-to-service traffic cheap — but because the calls look local, always wrap them in timeouts and circuit breakers.",
+      "Binary, multiplexed RPC (gRPC over HTTP/2) keeps service-to-service traffic cheap at high volume — but because the calls look local, you must wrap every one in timeouts, bounded retries with backoff and circuit breakers, or a slow dependency cascades into a system-wide stall.",
+    relatedConcepts: ["rest", "http", "circuit-breaker", "retry", "message-queue"],
+    sources: [
+      { label: "gRPC — Core concepts & architecture", url: "https://grpc.io/docs/what-is-grpc/core-concepts/" },
+      { label: "Protocol Buffers — Overview", url: "https://protobuf.dev/overview/" },
+      { label: "Google SRE — Addressing Cascading Failures", url: "https://sre.google/sre-book/addressing-cascading-failures/" },
+    ],
   },
 
   // ───────────────────────────────────────── Object Store
@@ -1722,39 +1830,57 @@ const INFRA_CONCEPTS: Concept[] = [
     category: "data",
     icon: "Columns3",
     tagline: "Split databases by function.",
+    mentalModel: "Splitting one overloaded general hospital into specialist clinics — a cardiology centre, a maternity centre, an eye clinic. Each is smaller, independently staffed and tuned for its work. The catch: a patient needing two specialties now has to travel between buildings.",
+    misconception: {
+      myth: "Federation and sharding are the same scaling technique.",
+      reality: "They split along different axes. Federation (functional/vertical) separates by domain — users here, orders there. Sharding (horizontal) splits one dataset by row across machines. Federation divides unrelated load; sharding divides a single oversized table.",
+    },
+    consequenceIfRemoved: "All domains share one database, so unrelated workloads contend for the same connections, locks and IO. A spike in one feature (say, analytics) degrades every other, and no team can tune or scale their slice in isolation.",
     definition:
-      "Federation (functional partitioning) splits a database by feature or domain — separate stores for users, products and orders — so each can be scaled and tuned independently. Not to be confused with identity federation (SAML/OAuth) or GraphQL federation — this is about splitting databases by domain.",
+      "Federation (functional partitioning) splits a database by feature or domain — separate stores for users, products and orders — so each scales, deploys and tunes independently. (Distinct from identity federation (SAML/OAuth) and GraphQL federation; here it means splitting databases by domain.)",
     whyItExists:
-      "A single monolithic database becomes a bottleneck and a point of contention. Splitting by function reduces load and lets teams own their slice of the data.",
+      "A single monolithic database becomes a shared bottleneck: unrelated features compete for the same locks, connections and IO budget. Splitting by function isolates that load and lets each team own and scale its slice without coordinating with everyone else.",
     problemSolved:
-      "Reduces read/write load and lock contention on any one database by separating unrelated concerns.",
+      "Reduces read/write load and lock contention on any one database by separating unrelated concerns into independently operable stores.",
     advantages: [
-      "Less load and contention per database",
-      "Smaller, faster per-domain datasets",
-      "Clear data ownership boundaries",
+      "Less load and contention per database — a hot domain no longer starves unrelated ones",
+      "Smaller per-domain datasets are faster to query, index, back up and restore",
+      "Clear ownership boundaries: each team operates and scales its own store, mirroring service boundaries",
+      "Different domains can use different engines — relational for orders, document for catalog",
     ],
     disadvantages: [
-      "Cross-domain joins move into application code",
-      "More databases to operate and back up",
-      "Doesn't help a single oversized dataset",
+      "Cross-domain joins move out of the database and into application code (fetch users, then fetch their orders)",
+      "You lose cross-domain transactions and foreign keys — consistency becomes the app's problem",
+      "More databases to provision, monitor, back up and secure",
+      "Doesn't help a single oversized dataset — one domain that outgrows a machine still needs sharding",
     ],
+    whenToUse:
+      "When distinct domains with different access patterns are contending in one database, and you want teams to own and scale their data independently — the data-layer counterpart of splitting a monolith into services.",
+    whenNotToUse:
+      "When the bottleneck is one giant table rather than competing domains (shard instead), or when your workload leans heavily on cross-domain joins and transactions that federation would force into fragile application code.",
     alternatives: [
-      { name: "Sharding", note: "Split one big dataset horizontally" },
-      { name: "Read replicas", note: "Scale reads, not domains" },
-      { name: "Microservices", note: "Service-private databases" },
+      { name: "Sharding", note: "Split one big dataset horizontally across machines" },
+      { name: "Read replicas", note: "Scale reads of the same data, not separate domains" },
+      { name: "Microservices", note: "Service-private databases enforce the same boundaries" },
     ],
     realWorld: [
-      "Separate users / orders / inventory databases",
-      "The data-layer mirror of microservices",
-      "Decomposing a strained monolith DB",
+      "Separate users / orders / inventory databases behind their own services",
+      "The data-layer mirror of a microservice decomposition",
+      "Breaking a strained monolith DB apart one domain at a time",
     ],
     interviewQuestions: [
-      "Federation vs sharding — what's the difference?",
-      "How do you join across federated databases?",
-      "When does federation stop helping?",
+      "Federation vs sharding — which axis does each split on, and when do you need each?",
+      "How do you handle a query that joins across two federated databases?",
+      "When does federation stop helping, and what comes next?",
     ],
     scaling:
-      "Federation buys headroom by dividing unrelated load, but a single hot domain still eventually needs sharding to scale beyond one machine.",
+      "Federation buys headroom by dividing unrelated load across stores, but it doesn't shrink any single domain. A hot domain that outgrows one machine still needs sharding — federation and sharding are complementary, applied in that order.",
+    relatedConcepts: ["sharding", "database", "read-replica", "services", "cqrs"],
+    sources: [
+      { label: "AWS — Database sharding & partitioning concepts", url: "https://aws.amazon.com/what-is/database-sharding/" },
+      { label: "Microsoft Azure — Data partitioning strategies", url: "https://learn.microsoft.com/en-us/azure/architecture/best-practices/data-partitioning" },
+      { label: "Microsoft Azure — Database-per-service pattern", url: "https://learn.microsoft.com/en-us/dotnet/architecture/microservices/architect-microservice-container-applications/data-sovereignty-per-microservice" },
+    ],
   },
 
   // ───────────────────────────────────────── Denormalization
@@ -1764,39 +1890,57 @@ const INFRA_CONCEPTS: Concept[] = [
     category: "data",
     icon: "Combine",
     tagline: "Trade write cost for read speed.",
+    mentalModel: "Printing the author's name directly on every book cover instead of looking it up in a separate catalog each time. Browsing is instant — but if the author changes their name, you must reprint every cover.",
+    misconception: {
+      myth: "Denormalization means your schema is badly designed.",
+      reality: "It's a deliberate performance tradeoff, not a mistake. You normalize first for correctness, then denormalize selectively where read performance demands it — accepting redundancy and the duty to keep copies in sync.",
+    },
+    consequenceIfRemoved: "Every read recomputes joins and aggregations at query time. In a read-heavy system that turns hot endpoints into expensive multi-table joins, and the database becomes the bottleneck long before the business needs it to.",
     definition:
-      "Denormalization stores redundant data — precomputed joins, duplicated fields — so reads avoid expensive joins, at the cost of more complex, duplicated writes.",
+      "Denormalization deliberately stores redundant data — precomputed joins, duplicated fields, rolled-up aggregates — so reads avoid expensive join and aggregation work, paying instead with more complex writes that must update every copy.",
     whyItExists:
-      "Joins across large tables are slow. When reads vastly outnumber writes, precomputing the joined shape is far cheaper overall.",
+      "Joins and aggregations across large tables are expensive, and they run on every read. When reads vastly outnumber writes, it's far cheaper overall to compute the joined shape once at write time and store it, than to recompute it on every query.",
     problemSolved:
-      "Eliminates expensive read-time joins and aggregations by paying that cost once, at write time.",
+      "Eliminates repeated read-time joins and aggregations by paying that cost once, at write time — converting expensive runtime queries into cheap direct reads.",
     advantages: [
-      "Much faster reads — no joins at query time",
-      "Fewer tables touched per query",
-      "Aligns naturally with key-value and document stores that lack joins",
+      "Much faster reads — a single-row fetch replaces a multi-table join on the hot path",
+      "Fewer tables and locks touched per query, which also reduces contention under load",
+      "Fits key-value and document stores (Cassandra, DynamoDB) that don't offer joins at all — there denormalization is the model, not an optimisation",
+      "Predictable read latency: no query planner surprises from a join that degrades as data grows",
     ],
     disadvantages: [
-      "Writes must update every copy",
-      "Risk of data drift and inconsistency",
-      "Uses more storage",
+      "Every write must update all copies, so writes get slower and more complex — and easy to get wrong",
+      "Data drift: if one copy is missed, reads return inconsistent values with no constraint to catch it",
+      "Uses more storage (sometimes dramatically) for the duplicated fields",
+      "Schema changes ripple across every place the data is duplicated",
     ],
+    whenToUse:
+      "Read-heavy paths where joins are the proven bottleneck, feeds/timelines/counters that are read far more than written, and key-value or document stores where joins aren't available. Apply it surgically to the hot queries that need it.",
+    whenNotToUse:
+      "Write-heavy systems, data with strong consistency requirements, or before you've measured a real read bottleneck — premature denormalization buys complexity and drift risk for no proven gain. Try a cache or materialized view first.",
     alternatives: [
-      { name: "Normalized + cache", note: "Keep one copy, cache hot reads" },
-      { name: "Materialized views", note: "DB precomputes the join" },
-      { name: "CQRS", note: "A separate read model" },
+      { name: "Normalized + cache", note: "Keep one source of truth, cache the hot reads" },
+      { name: "Materialized views", note: "Let the database maintain the precomputed join for you" },
+      { name: "CQRS", note: "A separate, independently-shaped read model" },
     ],
     realWorld: [
-      "Wide-column stores (Cassandra) by design",
-      "Precomputed feeds and counters",
-      "Storing author_name alongside post_id",
+      "Wide-column stores (Cassandra) where tables are designed per-query by design",
+      "Precomputed news feeds, timelines and counters",
+      "Storing author_name alongside post_id to skip a users join on every render",
     ],
     interviewQuestions: [
-      "When is denormalization worth it?",
-      "How do you keep duplicated copies consistent?",
-      "Normalization vs denormalization tradeoffs?",
+      "When is denormalization worth the write cost — and how do you decide which queries to denormalize?",
+      "How do you keep duplicated copies consistent, and what happens when one update is missed?",
+      "Normalization vs denormalization — what does each optimise for?",
     ],
     scaling:
-      "Denormalization is how you make reads scale when joins won't — but it pushes consistency work onto every write path, so it shines in read-heavy systems.",
+      "Denormalization is how you make reads scale when joins won't — but it pushes consistency work onto every write path. It shines in read-heavy systems; in write-heavy ones the synchronisation cost can outweigh the read savings.",
+    relatedConcepts: ["cache", "cqrs", "read-replica", "nosql", "indexing"],
+    sources: [
+      { label: "AWS — DynamoDB single-table & denormalization", url: "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-modeling-nosql-B.html" },
+      { label: "Microsoft Azure — Data denormalization & aggregation", url: "https://learn.microsoft.com/en-us/azure/cosmos-db/nosql/modeling-data" },
+      { label: "Use The Index, Luke — relational modelling", url: "https://use-the-index-luke.com/" },
+    ],
   },
 
   // ───────────────────────────────────────── Indexing
@@ -1806,39 +1950,57 @@ const INFRA_CONCEPTS: Concept[] = [
     category: "data",
     icon: "ListTree",
     tagline: "Find rows without scanning them all.",
+    mentalModel: "The index at the back of a textbook. To find every mention of 'mitochondria', you don't read all 900 pages — you flip to the alphabetised index and jump straight to the listed pages. The index is extra paper that must be reprinted whenever the book changes.",
+    misconception: {
+      myth: "Adding indexes always makes the database faster.",
+      reality: "Indexes speed reads but tax every write (each INSERT/UPDATE must maintain them) and consume storage. Too many — or the wrong ones — slow the system down. The planner may also ignore an index if it estimates a scan is cheaper.",
+    },
+    consequenceIfRemoved: "Every filtered query becomes a full table scan — O(n) work that reads every row. Lookups that should take microseconds take seconds as tables grow, and the database melts under load that proper indexes would have made trivial.",
     definition:
-      "An index is an auxiliary structure (usually a B-tree) that lets the database locate rows by a column's value in O(log n) instead of scanning the whole table — the first lever of SQL tuning.",
+      "An index is an auxiliary data structure — most often a B-tree — that lets the database locate rows by a column's value in roughly O(log n) instead of scanning the whole table in O(n). Choosing and maintaining indexes is the first and biggest lever of SQL tuning.",
     whyItExists:
-      "Full table scans are O(n) and crippling at scale. Indexes turn lookups, ranges and sorts into fast operations, at the cost of storage and slower writes.",
+      "Full table scans read every row, which is fine for hundreds of rows and catastrophic for millions. Indexes pre-sort a column into a structure the database can binary-search, turning lookups, range scans, sorts and joins from linear into logarithmic — paying with extra storage and slower writes.",
     problemSolved:
-      "Makes targeted reads — lookups, range scans, sorts, joins — fast without examining every row.",
+      "Makes targeted reads — equality lookups, range scans, ORDER BY, and join keys — fast without examining every row in the table.",
     advantages: [
-      "Dramatically faster reads, filters and sorts",
-      "Enables efficient joins and uniqueness",
-      "EXPLAIN exposes the query plan to tune",
+      "Turns O(n) table scans into O(log n) lookups — the difference between seconds and microseconds at scale",
+      "Accelerates filters, range queries, sorts and joins, and enforces uniqueness constraints cheaply",
+      "A covering index can answer a query from the index alone, never touching the table (an index-only scan)",
+      "EXPLAIN / EXPLAIN ANALYZE exposes the planner's choices so you can tune deliberately",
     ],
     disadvantages: [
-      "Every index slows down writes",
-      "Indexes consume storage",
-      "Wrong indexes hurt more than they help",
+      "Every index must be updated on each INSERT/UPDATE/DELETE, so writes get slower as index count grows",
+      "Indexes consume significant extra storage and memory (and compete for the buffer cache)",
+      "The wrong indexes hurt: low-selectivity columns, or many overlapping indexes, add write cost for little read gain",
+      "The planner may ignore an index it deems unhelpful — and stale statistics can make it choose badly",
     ],
+    whenToUse:
+      "On columns you frequently filter, join or sort by — especially high-selectivity ones in your real, measured query patterns. Use composite indexes for multi-column predicates and covering indexes for hot read paths.",
+    whenNotToUse:
+      "On small tables (a scan is already cheap), on low-selectivity columns (a boolean flag), or speculatively 'just in case'. On write-heavy tables, every extra index is a tax on every write — index only what you've proven you query.",
     alternatives: [
-      { name: "Full scans", note: "Fine for small tables" },
-      { name: "Denormalization", note: "Avoid the join entirely" },
-      { name: "Search engines", note: "Elasticsearch for text" },
+      { name: "Full scans", note: "Perfectly fine for small or rarely-queried tables" },
+      { name: "Denormalization", note: "Pre-join so the expensive query disappears entirely" },
+      { name: "Search engines", note: "Elasticsearch / OpenSearch for full-text and faceted search" },
     ],
     realWorld: [
-      "B-tree indexes in Postgres / MySQL",
-      "Composite and covering indexes",
-      "EXPLAIN ANALYZE to inspect plans",
+      "B-tree indexes backing primary keys and foreign keys in Postgres / MySQL",
+      "Composite and covering indexes tuned to specific endpoints",
+      "EXPLAIN ANALYZE used to confirm an index is actually being used",
     ],
     interviewQuestions: [
-      "How does a B-tree index work?",
-      "Why can too many indexes hurt?",
-      "What is a covering index?",
+      "How does a B-tree index turn an O(n) scan into an O(log n) lookup?",
+      "Why can too many indexes hurt, and how do you decide which to keep?",
+      "What is a covering index, and when does it enable an index-only scan?",
     ],
     scaling:
-      "Indexing is the first thing to reach for in SQL tuning — but each index taxes writes, so index for your real query patterns, not hypothetical ones.",
+      "Indexing is the first thing to reach for in SQL tuning, and often buys orders of magnitude before any architectural change. But each index taxes writes — so index for your real, measured query patterns, not hypothetical ones, and revisit them as access patterns shift.",
+    relatedConcepts: ["database", "denormalization", "read-replica", "nosql"],
+    sources: [
+      { label: "Use The Index, Luke — How indexing works", url: "https://use-the-index-luke.com/sql/anatomy" },
+      { label: "PostgreSQL Docs — Indexes", url: "https://www.postgresql.org/docs/current/indexes.html" },
+      { label: "PostgreSQL Docs — Using EXPLAIN", url: "https://www.postgresql.org/docs/current/using-explain.html" },
+    ],
   },
 
   // ───────────────────────────────────────── Consistent Hashing
@@ -1848,39 +2010,57 @@ const INFRA_CONCEPTS: Concept[] = [
     category: "scalability",
     icon: "Disc3",
     tagline: "Add a node without reshuffling everything.",
+    mentalModel: "Seating guests around a circular table by birthday. Each guest sits at the next chair clockwise from their date. Add or remove one chair and only the guests beside it shuffle — everyone else stays put. Compare that to renumbering every seat the moment one person leaves.",
+    misconception: {
+      myth: "Consistent hashing distributes load perfectly evenly.",
+      reality: "Plain consistent hashing can leave nodes with very uneven shares, because a few random ring positions rarely split the circle fairly. Even distribution comes from virtual nodes — placing each physical node at many ring points — not from the ring itself.",
+    },
+    consequenceIfRemoved: "Sharding falls back to hash(key) % N. The moment you add or remove a node, N changes and almost every key remaps — a thundering herd of cache misses (or a full data reshuffle) that can knock the backing store over exactly when you were trying to scale.",
     definition:
-      "Consistent hashing maps both keys and nodes onto a ring; each key belongs to the next node clockwise, so adding or removing a node only relocates the keys near it — not all of them.",
+      "Consistent hashing maps both keys and nodes onto the same circular hash space (a ring); each key is owned by the first node clockwise from it, so adding or removing a node only relocates the keys in its immediate arc — about 1/N of them — rather than remapping everything.",
     whyItExists:
-      "Naive hash(key) % N remaps almost every key when N changes, causing massive cache and data churn. Consistent hashing makes scaling incremental.",
+      "The obvious scheme, hash(key) % N, ties every key's location to the node count. Change N by one and nearly every key moves, wiping caches and triggering mass data movement. Consistent hashing decouples a key's position from N, so membership changes become incremental instead of catastrophic.",
     problemSolved:
-      "Minimises how much data must move when the cluster grows or shrinks, keeping caches warm and rebalancing cheap.",
+      "Minimises how much data must move when a cluster grows, shrinks or loses a node — keeping distributed caches warm and rebalancing cheap and local.",
     advantages: [
-      "Only ~1/N of keys move when scaling",
-      "No global reshuffle on membership change",
-      "Virtual nodes smooth out hotspots",
+      "Only ~1/N of keys move on a membership change, instead of nearly all of them with modulo hashing",
+      "No central coordinator needed: ownership is a purely local 'walk clockwise' rule any client can compute",
+      "Virtual nodes (many ring points per server) smooth out load and let heterogeneous servers carry weighted shares",
+      "A failed node's keys fall to its single clockwise neighbour, not the whole cluster — failure is contained",
     ],
     disadvantages: [
-      "More complex than modulo hashing",
-      "Uneven load without virtual nodes",
-      "Still needs replication for availability",
+      "More complex to implement and reason about than hash(key) % N",
+      "Without virtual nodes, random placement leaves load badly skewed across nodes",
+      "Provides placement only — you still need replication for availability and durability",
+      "A node failure dumps all its load onto one neighbour, which can then become a hotspot",
     ],
+    whenToUse:
+      "Whenever a distributed cache, database or router must add and remove nodes elastically without remapping the whole keyspace — partitioning in Cassandra/DynamoDB-style stores, sharded caches, and sticky request routing.",
+    whenNotToUse:
+      "For a fixed, rarely-changing set of nodes, plain modulo hashing is simpler and fine. If you need ordered range scans, range partitioning fits better — consistent hashing scatters adjacent keys around the ring.",
     alternatives: [
-      { name: "Modulo hashing", note: "Simple, but churny on resize" },
-      { name: "Range partitioning", note: "Ordered, but prone to hotspots" },
-      { name: "Rendezvous hashing", note: "Highest-random-weight variant" },
+      { name: "Modulo hashing", note: "Dead simple, but remaps almost everything on resize" },
+      { name: "Range partitioning", note: "Keeps keys ordered for range scans, but prone to hotspots" },
+      { name: "Rendezvous (HRW) hashing", note: "Highest-random-weight; even simpler ownership, similar guarantees" },
     ],
     realWorld: [
-      "Distributed caches (Memcached clients)",
-      "Cassandra & DynamoDB partitioning",
-      "CDN and load-balancer request routing",
+      "Distributed cache clients (Memcached/Redis client-side sharding)",
+      "Partitioning in Cassandra and DynamoDB",
+      "CDN and load-balancer routing that pins a key to a consistent backend",
     ],
     interviewQuestions: [
-      "Why not just hash mod N?",
-      "How do virtual nodes help distribution?",
-      "What happens to keys when a node fails?",
+      "Why not just hash(key) % N — what exactly goes wrong when N changes?",
+      "How do virtual nodes fix the uneven-distribution problem?",
+      "What happens to a failed node's keys, and how can that create a hotspot?",
     ],
     scaling:
-      "Consistent hashing is what lets distributed caches and databases grow and shrink elastically without triggering a thundering herd of cache misses.",
+      "Consistent hashing is what lets distributed caches and databases grow and shrink elastically without a thundering herd of cache misses. Virtual nodes are essential at scale — they're what turn 'works in theory' into evenly balanced load in practice.",
+    relatedConcepts: ["sharding", "cache", "load-balancer", "nosql"],
+    sources: [
+      { label: "Karger et al. — Consistent Hashing (original paper, 1997)", url: "https://www.cs.princeton.edu/courses/archive/fall09/cos518/papers/chash.pdf" },
+      { label: "Amazon — Dynamo paper (partitioning via consistent hashing)", url: "https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf" },
+      { label: "Cloudflare — Consistent hashing explained", url: "https://blog.cloudflare.com/improving-load-balancing-with-a-new-consistent-hashing-algorithm/" },
+    ],
     internal: {
       summary: "A key is hashed onto a ring and owned by the next node clockwise; adding a node only steals keys from its neighbour.",
       nodes: [
@@ -1906,39 +2086,57 @@ const INFRA_CONCEPTS: Concept[] = [
     category: "reliability",
     icon: "RefreshCw",
     tagline: "Promote a standby when the primary dies.",
+    mentalModel: "A co-pilot in the cockpit. They're trained, strapped in, and tracking the flight the whole time — so if the captain is incapacitated, they take the controls in seconds, not minutes. The cost is paying a second qualified pilot to mostly watch.",
+    misconception: {
+      myth: "Failover means zero downtime and no lost data.",
+      reality: "There's always a failover gap — the window between detecting the failure and the standby taking over — during which requests fail. And if replication to the standby was asynchronous, the most recent writes can be lost. Failover bounds downtime; it rarely eliminates it.",
+    },
+    consequenceIfRemoved: "Any single node's death takes the service down until a human notices, diagnoses, and manually promotes a replacement — turning a 30-second blip into a multi-hour outage and making real availability targets impossible.",
     definition:
-      "Failover automatically shifts traffic from a failed component to a healthy replacement — active-passive (a warm standby waits) or active-active (all nodes serve and survivors absorb the load).",
+      "Failover automatically shifts traffic from a failed component to a healthy replacement. In active-passive a warm standby waits idle until promoted; in active-active all nodes serve simultaneously and the survivors absorb a failed node's share.",
     whyItExists:
-      "Hardware and processes fail. To stay available, the system must detect failure and redirect to a replacement without waiting for a human.",
+      "Hardware, processes and networks fail — it's a certainty, not a risk. To stay available a system must detect failure and redirect to a replacement automatically, in seconds, without waiting for a human to wake up and intervene.",
     problemSolved:
-      "Removes single points of failure by ensuring a ready replacement takes over the moment a node goes down.",
+      "Removes single points of failure by guaranteeing a ready replacement takes over the moment a node goes down, bounding downtime to the detection-plus-promotion window.",
     advantages: [
-      "Higher availability — more nines",
-      "Recovers without human intervention",
-      "Active-active also adds serving capacity",
+      "Bounds downtime to seconds and recovers without paging a human — the foundation of high availability",
+      "Active-active doubles as horizontal scale: the standbys aren't idle, they're serving traffic too",
+      "Health-check-driven, so it reacts to real failure signals rather than a fixed schedule",
+      "Combined with multi-AZ/multi-region placement, it survives whole-datacentre failures",
     ],
     disadvantages: [
-      "Standby capacity costs money (active-passive)",
-      "Split-brain risk if both think they're primary",
-      "Failover itself can drop in-flight work",
+      "Active-passive pays for standby capacity that sits idle until the rare moment it's needed",
+      "Split-brain risk: if both nodes believe they're primary, they accept conflicting writes and corrupt data — fencing/quorum is mandatory",
+      "The failover itself drops in-flight requests, and async replication can lose the last few writes (non-zero RPO)",
+      "Tuning detection is a tightrope: too sensitive and it flaps, too slow and downtime drags",
     ],
+    whenToUse:
+      "For any stateful component whose downtime is unacceptable — primary databases, brokers, leaders. Active-passive when correctness and simplicity matter most; active-active when you also need the extra capacity and can tolerate concurrent writers.",
+    whenNotToUse:
+      "For stateless services already behind a load balancer (it does the rerouting for you), or for systems where a short manual recovery is genuinely acceptable and the standby cost and split-brain complexity aren't worth it.",
     alternatives: [
-      { name: "Active-active", note: "All nodes serve; no idle standby" },
-      { name: "Multi-region", note: "Survive a whole region failing" },
-      { name: "Accept downtime", note: "Sometimes cheapest and fine" },
+      { name: "Active-active", note: "All nodes serve; survivors absorb load, no idle standby" },
+      { name: "Multi-region failover", note: "Survive an entire region going dark" },
+      { name: "Accept downtime", note: "For non-critical systems, manual recovery can be the right cost tradeoff" },
     ],
     realWorld: [
-      "DB primary failover (Patroni, RDS Multi-AZ)",
-      "Load balancers draining dead instances",
-      "Leader election via Raft / ZooKeeper",
+      "Database primary failover via Patroni or RDS/Aurora Multi-AZ",
+      "Load balancers draining and rerouting around dead instances",
+      "Leader election via Raft or ZooKeeper to pick the new primary safely",
     ],
     interviewQuestions: [
-      "Active-passive vs active-active?",
-      "What is split-brain and how do you prevent it?",
-      "How do health checks drive failover?",
+      "Active-passive vs active-active — cost, capacity and consistency tradeoffs of each?",
+      "What is split-brain, and how do fencing and quorum prevent it?",
+      "What determine your RTO and RPO during a failover, and how do you shrink each?",
     ],
     scaling:
-      "Failover is the mechanism behind the availability nines; active-active doubles as horizontal scale, while active-passive trades idle cost for simplicity.",
+      "Failover is the mechanism behind the availability nines. Active-active doubles as horizontal scale; active-passive trades idle standby cost for simplicity and stronger consistency. Either way, quorum-based promotion is what keeps a partition from producing two primaries.",
+    relatedConcepts: ["read-replica", "load-balancer", "cap-theorem", "circuit-breaker", "database"],
+    sources: [
+      { label: "AWS — RDS Multi-AZ failover", url: "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Concepts.MultiAZ.html" },
+      { label: "Google SRE — Managing Critical State (consensus, leader election)", url: "https://sre.google/sre-book/managing-critical-state/" },
+      { label: "Raft — In Search of an Understandable Consensus Algorithm", url: "https://raft.github.io/raft.pdf" },
+    ],
     internal: {
       summary: "A health check continuously probes the primary; on failure it promotes a standby to take over.",
       nodes: [
@@ -1967,39 +2165,57 @@ const INFRA_CONCEPTS: Concept[] = [
     category: "reliability",
     icon: "Repeat",
     tagline: "Try again — but politely.",
+    mentalModel: "Calling a busy phone line. You don't redial the instant it's engaged, again and again — that just keeps the line jammed. You wait a bit, then a bit longer, and you and everyone else stagger your redials so you don't all hit redial at the same second.",
+    misconception: {
+      myth: "Adding retries always makes a system more reliable.",
+      reality: "Naïve retries are how a small blip becomes a full outage. When a dependency is already overloaded, every client retrying immediately multiplies the load — a self-inflicted DDoS. Retries help only with backoff, jitter, a retry budget, and idempotent operations.",
+    },
+    consequenceIfRemoved: "Every transient blip — a momentary network drop, a brief GC pause — surfaces as a hard user-facing error, even though simply trying again a moment later would have succeeded. Reliability drops for failures that were never really failures.",
     definition:
-      "A retry re-attempts a failed operation, ideally with exponential backoff and jitter, to ride out transient failures without overwhelming an already-struggling dependency.",
+      "A retry re-attempts a failed operation, ideally with exponential backoff (waiting longer after each failure) and jitter (randomising the wait), to ride out transient failures without overwhelming an already-struggling dependency.",
     whyItExists:
-      "Many failures are transient — a blip, a brief overload. Retrying recovers from them, but naive immediate retries can turn a hiccup into a self-inflicted DDoS.",
+      "Many failures are transient: a dropped packet, a leader election, a brief overload. Retrying recovers from them invisibly. But immediate, synchronised retries from many clients turn a momentary hiccup into a sustained stampede — so the retry must be deliberately paced.",
     problemSolved:
-      "Recovers from transient errors automatically while backoff and jitter stop retry storms from amplifying the original problem.",
+      "Recovers from transient errors automatically, while backoff and jitter stop the recovery mechanism itself from amplifying the original problem into an outage.",
     advantages: [
-      "Transparently survives transient faults",
-      "Backoff protects the struggling dependency",
-      "Jitter de-synchronises retrying clients",
+      "Transparently survives transient faults the user would otherwise see as errors",
+      "Exponential backoff gives a struggling dependency room to recover instead of pinning it down",
+      "Jitter de-synchronises clients so they don't all retry on the same tick (the thundering-herd fix)",
+      "A retry budget caps the fraction of traffic that is retries, bounding the worst-case amplification",
     ],
     disadvantages: [
-      "Retrying non-idempotent ops can double-apply",
-      "Unbounded retries amplify load",
-      "Adds latency to the eventual success/failure",
+      "Retrying a non-idempotent operation can double-apply it (charge a card twice) without an idempotency key",
+      "Unbounded or un-jittered retries amplify load and can cause or prolong the very outage they react to",
+      "Each retry adds latency to the eventual success or final failure the user waits on",
+      "Retries compound across layers — client, gateway and service each retrying multiplies attempts geometrically",
     ],
+    whenToUse:
+      "For idempotent operations against dependencies that fail transiently — reads, idempotent writes, network calls — always paired with exponential backoff, jitter, a capped attempt count and a retry budget.",
+    whenNotToUse:
+      "For non-idempotent operations without an idempotency key, or against a dependency that is hard-down rather than blipping — there a circuit breaker (stop calling) beats retrying. Never retry a 4xx client error; it'll fail every time.",
     alternatives: [
-      { name: "Circuit breaker", note: "Stop retrying a dead dependency" },
-      { name: "Idempotency keys", note: "Make retries safe to repeat" },
-      { name: "Dead-letter queue", note: "Park what keeps failing" },
+      { name: "Circuit breaker", note: "Stop calling a dependency that's hard-down instead of retrying it" },
+      { name: "Idempotency keys", note: "Make a retry safe to apply more than once" },
+      { name: "Dead-letter queue", note: "Park work that keeps failing for later inspection" },
     ],
     realWorld: [
-      "AWS SDKs' exponential backoff",
-      "Retrying idempotent reads automatically",
-      "Capped retries + full jitter",
+      "AWS SDKs retrying with exponential backoff and full jitter by default",
+      "Automatically retrying idempotent reads on transient 5xx/timeout",
+      "Retry budgets in service meshes (Envoy/Istio) capping retry amplification",
     ],
     interviewQuestions: [
-      "Why add jitter to exponential backoff?",
-      "Which operations are safe to retry?",
-      "Retry vs circuit breaker — when each?",
+      "Why is jitter as important as backoff — what fails without it?",
+      "Which operations are safe to retry, and how do idempotency keys make the rest safe?",
+      "Retry vs circuit breaker — when does each apply, and how do they compose?",
     ],
     scaling:
-      "At scale, synchronised retries cause thundering herds — exponential backoff with jitter and a retry budget keep recovery from becoming the outage.",
+      "At scale, synchronised retries cause thundering herds that turn a recoverable blip into an outage. Exponential backoff with full jitter, a bounded attempt count, and a retry budget are what keep the recovery mechanism from becoming the incident.",
+    relatedConcepts: ["circuit-breaker", "rpc", "message-queue", "back-pressure", "rate-limiting"],
+    sources: [
+      { label: "AWS — Timeouts, retries and backoff with jitter", url: "https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/" },
+      { label: "AWS — Exponential Backoff And Jitter (blog)", url: "https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/" },
+      { label: "Google SRE — Addressing Cascading Failures", url: "https://sre.google/sre-book/addressing-cascading-failures/" },
+    ],
   },
 
   // ───────────────────────────────────────── Back Pressure
@@ -2009,39 +2225,57 @@ const INFRA_CONCEPTS: Concept[] = [
     category: "reliability",
     icon: "Waves",
     tagline: "Push back when you're overwhelmed.",
+    mentalModel: "A kitchen during a dinner rush. When orders pile up faster than the chefs can cook, the right move isn't to keep accepting every order until the tickets bury the kitchen — it's for the expediter to tell the front of house 'stop seating, we're slammed.' The pressure flows backward up the line.",
+    misconception: {
+      myth: "A bigger queue solves overload — just buffer more.",
+      reality: "A bigger buffer only delays the collapse and makes it worse: latency balloons as items sit in the queue, then memory runs out and everything crashes at once. Back pressure addresses the real problem — the producer is simply faster than the consumer — by slowing or shedding at the source.",
+    },
+    consequenceIfRemoved: "Fast producers fill an unbounded queue until the consumer runs out of memory and crashes — taking the in-flight work with it. Overload stays invisible until the moment of total failure, instead of degrading gracefully.",
     definition:
-      "Back pressure is a flow-control signal: when a consumer can't keep up, it tells producers to slow down — or rejects and sheds work — instead of silently collapsing.",
+      "Back pressure is a flow-control signal: when a consumer can't keep up, it tells producers to slow down — or it bounds its intake and rejects/sheds the excess — instead of silently buffering until it collapses.",
     whyItExists:
-      "Unbounded queues hide overload until memory runs out and everything crashes. Back pressure surfaces the limit and keeps the system in a stable, degraded state.",
+      "Producers and consumers rarely run at the same speed, and unbounded queues hide that mismatch until memory is exhausted. Back pressure makes the limit explicit and keeps the system in a stable, predictably-degraded state rather than letting it accumulate toward a cliff.",
     problemSolved:
-      "Prevents fast producers from overwhelming slow consumers, avoiding unbounded queues, OOM crashes and cascading failure.",
+      "Prevents fast producers from overwhelming slow consumers — avoiding unbounded queues, runaway latency, out-of-memory crashes and the cascading failure they trigger.",
     advantages: [
-      "Stability under overload",
-      "Bounded memory and queue depth",
-      "Fails predictably (429/503) not catastrophically",
+      "Keeps the system stable under overload instead of accumulating toward a sudden collapse",
+      "Bounds memory and queue depth, so latency stays predictable rather than growing without limit",
+      "Fails fast and explicitly (HTTP 429/503) — callers learn the truth immediately and can back off",
+      "Contains failure locally instead of letting one slow consumer stall everything upstream of it",
     ],
     disadvantages: [
-      "Producers must handle rejection or slowdown",
-      "Pressure can propagate upstream",
-      "Thresholds are tricky to tune",
+      "Producers must be written to handle rejection or slowdown — fire-and-forget code breaks",
+      "Pressure propagates upstream, so the limit has to be handled at every tier, not just the bottleneck",
+      "Thresholds and buffer sizes are genuinely hard to tune — too tight wastes capacity, too loose defeats the purpose",
+      "Shedding work means some requests are deliberately failed; that policy decision must be explicit",
     ],
+    whenToUse:
+      "Any pipeline where a producer can outpace a consumer — streaming, queue consumers, request handlers calling slower dependencies. Essential wherever an unbounded in-memory buffer could otherwise grow without limit.",
+    whenNotToUse:
+      "When load is reliably below capacity and bounded, or when proactively capping input at the edge (rate limiting) or adding consumers (autoscaling) is a cleaner fit. Back pressure complements these rather than replacing them.",
     alternatives: [
-      { name: "Rate limiting", note: "Cap input proactively" },
-      { name: "Load shedding", note: "Drop low-priority work" },
-      { name: "Autoscaling", note: "Add consumers instead" },
+      { name: "Rate limiting", note: "Cap input proactively at the edge, before it enters the system" },
+      { name: "Load shedding", note: "Drop low-priority work first to protect the critical path" },
+      { name: "Autoscaling", note: "Add consumer capacity — but it reacts in minutes, not milliseconds" },
     ],
     realWorld: [
-      "TCP flow control (the original back pressure)",
-      "Reactive streams signalling demand",
-      "Queues rejecting when full; HTTP 429/503",
+      "TCP flow control — the original back pressure, via the receive window",
+      "Reactive Streams (the request(n) demand signal) and bounded executor queues",
+      "Bounded queues that reject when full; HTTP 429/503 telling clients to slow down",
     ],
     interviewQuestions: [
-      "Back pressure vs rate limiting?",
-      "What happens with an unbounded queue under load?",
-      "How do reactive streams signal demand upstream?",
+      "Back pressure vs rate limiting — where does each sit, and how do they differ?",
+      "What exactly happens to a system with an unbounded queue under sustained overload?",
+      "How do Reactive Streams signal demand upstream so producers can't outrun consumers?",
     ],
     scaling:
-      "Back pressure is what keeps a distributed system from melting down under a spike — it converts 'crash' into 'gracefully slow', buying time for autoscaling to catch up.",
+      "Back pressure is what stops a distributed system from melting down under a spike — it converts 'crash' into 'gracefully slow / shed', buying time for autoscaling to add capacity. Without it, a single slow tier silently propagates failure to everything feeding it.",
+    relatedConcepts: ["rate-limiting", "message-queue", "circuit-breaker", "task-queue", "tcp"],
+    sources: [
+      { label: "Reactive Streams — Specification", url: "https://www.reactive-streams.org/" },
+      { label: "Google SRE — Handling Overload", url: "https://sre.google/sre-book/handling-overload/" },
+      { label: "AWS — Using load shedding to avoid overload", url: "https://aws.amazon.com/builders-library/using-load-shedding-to-avoid-overload/" },
+    ],
   },
 
   // ───────────────────────────────────────── Task Queue
@@ -2051,39 +2285,57 @@ const INFRA_CONCEPTS: Concept[] = [
     category: "messaging",
     icon: "ListChecks",
     tagline: "Offload slow work to background workers.",
+    mentalModel: "A restaurant order ticket rail. The waiter (web request) doesn't stand at the table cooking — they clip the ticket to the rail and immediately go serve the next guest. The kitchen (workers) pulls tickets and cooks at its own pace. The diner gets a fast 'order received', not a frozen waiter.",
+    misconception: {
+      myth: "A task queue and a message queue are the same thing.",
+      reality: "A task queue is a higher-level abstraction built for running jobs — it adds retries, scheduling, result tracking and worker pools. A message queue is lower-level transport for events. Task queues (Celery, Sidekiq) often run on top of a message broker (Redis, RabbitMQ).",
+    },
+    consequenceIfRemoved: "Slow work — sending email, encoding video, generating a report — runs inside the request, so response times balloon to seconds and a spike in slow jobs ties up web threads and stalls fast requests too.",
     definition:
-      "A task queue accepts units of work (jobs) and hands them to a pool of background workers that execute them asynchronously, decoupling slow work from the request path.",
+      "A task queue accepts units of work (jobs), persists them, and hands them to a pool of background workers that execute them asynchronously — decoupling slow, retryable or scheduled work from the synchronous request path.",
     whyItExists:
-      "Some work — sending email, generating thumbnails, running billing — is too slow to do inside a request. A task queue lets you accept it instantly and process it later.",
+      "Some work is simply too slow to do inside a request the user is waiting on — sending email, generating thumbnails, running billing. A task queue lets the request accept the work instantly, return a fast response, and let workers process it later, out of band.",
     problemSolved:
-      "Keeps request latency low by moving slow, retryable, or scheduled work off the synchronous path onto workers.",
+      "Keeps request latency low by moving slow, retryable or scheduled work off the synchronous path onto independently-scaled workers, with retries and dead-lettering built in.",
     advantages: [
-      "Fast responses — the work happens later",
-      "Built-in retries and scheduling",
-      "Scale workers independently of the web tier",
+      "Fast responses: the request enqueues in milliseconds and returns, while the heavy work runs later",
+      "Workers scale independently of the web tier, sized to queue depth rather than request rate",
+      "Built-in retries, delays and scheduling handle transient failures and periodic jobs without bespoke code",
+      "Absorbs spikes: a burst of jobs queues up and drains at the workers' sustainable pace instead of overwhelming them",
     ],
     disadvantages: [
-      "Eventual completion, not instant",
-      "Jobs must be idempotent (at-least-once)",
-      "Another system to monitor (dead-letter queues)",
+      "Eventual completion, not instant — the UI must handle 'queued/processing' states and notify on completion",
+      "Most queues deliver at-least-once, so jobs must be idempotent or guard against double execution",
+      "Another moving part to run and monitor: the broker, the workers, and a dead-letter queue for poison jobs",
+      "Ordering and exactly-once are hard — don't assume jobs run in submission order without explicit design",
     ],
+    whenToUse:
+      "For slow, retryable, or scheduled work that doesn't need to finish inside the request — email, media processing, report generation, billing, webhooks, periodic cleanup. Anywhere you want to return fast and process later.",
+    whenNotToUse:
+      "When the caller genuinely needs the result before responding (do it synchronously), or for low-level event streaming/fan-out where a raw message queue or log (Kafka) is the better primitive. Don't add a worker tier for work that's already fast.",
     alternatives: [
-      { name: "Message queue", note: "Lower-level event transport" },
-      { name: "Synchronous", note: "Simple, but blocks the request" },
-      { name: "Cron / batch", note: "For scheduled bulk work" },
+      { name: "Message queue", note: "Lower-level event transport a task queue often runs on" },
+      { name: "Synchronous call", note: "Simplest — fine when the work is genuinely fast" },
+      { name: "Cron / batch", note: "For scheduled bulk work without per-job enqueueing" },
     ],
     realWorld: [
-      "Celery on Redis / RabbitMQ",
-      "Sidekiq for Ruby background jobs",
-      "Thumbnail, email and report pipelines",
+      "Celery on Redis or RabbitMQ for Python background jobs",
+      "Sidekiq (Redis) for Ruby; Resque, BullMQ in the Node ecosystem",
+      "Thumbnail, email, and report-generation pipelines",
     ],
     interviewQuestions: [
-      "Task queue vs message queue?",
-      "How do you handle a job that keeps failing?",
-      "How do you schedule delayed or periodic jobs?",
+      "Task queue vs message queue — what does the task queue add on top?",
+      "How do you handle a job that keeps failing (poison message), and what is a dead-letter queue?",
+      "How do you make at-least-once job processing safe — and how do you schedule delayed or periodic jobs?",
     ],
     scaling:
-      "Workers scale horizontally off the queue depth — queue length is your autoscaling signal, and back pressure protects the downstreams they write to.",
+      "Workers scale horizontally off queue depth — queue length is your autoscaling signal. Back pressure on the queue protects the downstreams workers write to, and a dead-letter queue keeps one poison job from blocking the rest.",
+    relatedConcepts: ["message-queue", "worker-service", "back-pressure", "retry", "write-api-async"],
+    sources: [
+      { label: "Celery — Introduction & architecture", url: "https://docs.celeryq.dev/en/stable/getting-started/introduction.html" },
+      { label: "AWS — SQS dead-letter queues", url: "https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-dead-letter-queues.html" },
+      { label: "Sidekiq — Best practices", url: "https://github.com/sidekiq/sidekiq/wiki/Best-Practices" },
+    ],
   },
 ];
 
