@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Compass, Gauge, GitBranch, Blocks, GraduationCap, BrainCircuit, Orbit, HelpCircle, X, Search, Share2, Route, Check } from "lucide-react";
+import { Compass, Gauge, GitBranch, Blocks, GraduationCap, BrainCircuit, Orbit, HelpCircle, X, Search, Share2, Route, Check, Globe } from "lucide-react";
 import { useUniverse } from "@/lib/store";
 import { buildShareUrl } from "@/lib/persistence";
 import type { ViewMode } from "@/lib/types";
@@ -17,6 +17,7 @@ const TABS: { id: ViewMode; label: string; icon: React.ReactNode }[] = [
   { id: "studio", label: "Build", icon: <Blocks size={15} /> },
   { id: "learn", label: "Learn", icon: <GraduationCap size={15} /> },
   { id: "reason", label: "Reason", icon: <BrainCircuit size={15} /> },
+  { id: "atlas", label: "Real Systems", icon: <Globe size={15} /> },
 ];
 
 const HELP = [
@@ -26,6 +27,7 @@ const HELP = [
   { k: "Build", v: "Design your own architecture from a palette and get a live expert review — scoring, single points of failure and missing pieces." },
   { k: "Learn", v: "The atlas: browse every concept and cross-cutting principle, plus interactive tools." },
   { k: "Reason", v: "Think like an architect: get a recommended design, diagnose bottlenecks, and weigh tradeoffs." },
+  { k: "Real Systems", v: "Explore what is publicly known about real-world systems — company architectures, technology origins, and evolution stories with full source citations." },
 ];
 
 export function TopBar() {

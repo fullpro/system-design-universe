@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { Node as RFNode, Edge as RFEdge } from "@xyflow/react";
-import type { ViewMode, ReasonTab, CategoryId } from "./types";
+import type { ViewMode, ReasonTab, AtlasTab, CategoryId } from "./types";
 import { SIM_TIERS } from "./simulator";
 import { EVOLUTION_STAGES } from "./evolution";
 import { JOURNEYS } from "./journey";
@@ -71,6 +71,11 @@ interface UniverseState {
   diagSelected: string | null;
   diagRevealed: boolean;
 
+  // Real Systems Atlas
+  atlasTab: AtlasTab;
+  atlasCompanyId: string | null;
+  atlasTechId: string | null;
+
   // Actions
   setCommandOpen: (open: boolean) => void;
   openTool: (id: string) => void;
@@ -117,6 +122,10 @@ interface UniverseState {
   setJourneyStep: (i: number) => void;
   toggleJourneyPlay: () => void;
 
+  setAtlasTab: (tab: AtlasTab) => void;
+  selectAtlasCompany: (id: string | null) => void;
+  selectAtlasTech: (id: string | null) => void;
+
   setReasonTab: (tab: ReasonTab) => void;
   setRequirements: (patch: Partial<Requirements>) => void;
   applyRequirements: (values: Requirements) => void;
@@ -154,6 +163,10 @@ export const useUniverse = create<UniverseState>((set) => ({
   journeyId: "read",
   journeyStep: null,
   journeyPlaying: false,
+
+  atlasTab: "companies",
+  atlasCompanyId: null,
+  atlasTechId: null,
 
   reasonTab: "advisor",
   requirements: DEFAULT_REQUIREMENTS,
@@ -310,6 +323,10 @@ export const useUniverse = create<UniverseState>((set) => ({
         return { journeyStep: 0, journeyPlaying: true };
       return { journeyPlaying: !s.journeyPlaying };
     }),
+
+  setAtlasTab: (tab) => set({ atlasTab: tab, atlasCompanyId: null, atlasTechId: null }),
+  selectAtlasCompany: (id) => set({ atlasCompanyId: id }),
+  selectAtlasTech: (id) => set({ atlasTechId: id }),
 
   setReasonTab: (tab) => set({ reasonTab: tab, selectedConceptId: null }),
   setRequirements: (patch) => set((s) => ({ requirements: { ...s.requirements, ...patch } })),

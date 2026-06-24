@@ -55,6 +55,7 @@ export const FOUNDATIONS: Concept[] = [
     whenNotToUse:
       "Don't apply CAP to single-node systems (no partitions, no tradeoff). Don't use CAP alone — it says nothing about latency during normal operation. Reach for PACELC when you also need to reason about the latency-consistency tradeoff in the no-partition case.",
     relatedConcepts: ["consistency-models", "acid", "base", "database", "nosql"],
+    prerequisites: [],
     sources: [
       { label: "Brewer — CAP Twelve Years Later", url: "https://www.infoq.com/articles/cap-twelve-years-later-how-the-rules-have-changed/" },
       { label: "Martin Kleppmann — Please stop calling databases CP or AP", url: "https://martin.kleppmann.com/2015/05/11/please-stop-calling-databases-cp-or-ap.html" },
@@ -109,6 +110,7 @@ export const FOUNDATIONS: Concept[] = [
     whenNotToUse:
       "Don't default to strong consistency everywhere — the coordination cost kills latency and availability at scale. Conversely, don't use eventual consistency for financial balances or anything where a stale read causes real harm.",
     relatedConcepts: ["cap-theorem", "database", "read-replica", "acid", "base"],
+    prerequisites: ["cap-theorem"],
     sources: [
       { label: "Jepsen — Consistency models", url: "https://jepsen.io/consistency" },
       { label: "AWS — Consistency models in DynamoDB", url: "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadConsistency.html" },
@@ -163,6 +165,7 @@ export const FOUNDATIONS: Concept[] = [
     whenNotToUse:
       "For high-throughput, eventually-consistent workloads (event streams, analytics ingestion, activity feeds) where the coordination overhead of transactions kills performance and availability. Consider BASE or saga patterns instead.",
     relatedConcepts: ["base", "cap-theorem", "database", "consistency-models", "sharding"],
+    prerequisites: [],
     sources: [
       { label: "PostgreSQL — Transaction isolation", url: "https://www.postgresql.org/docs/current/transaction-iso.html" },
       { label: "Jepsen — Consistency models", url: "https://jepsen.io/consistency" },
@@ -217,6 +220,7 @@ export const FOUNDATIONS: Concept[] = [
     whenNotToUse:
       "For operations requiring strict correctness — financial transfers, inventory where overselling is costly, anything governed by a regulatory ledger. Use ACID transactions for these, even if it limits scale.",
     relatedConcepts: ["acid", "cap-theorem", "nosql", "consistency-models", "database"],
+    prerequisites: ["acid", "cap-theorem"],
     sources: [
       { label: "Werner Vogels — Eventually Consistent", url: "https://www.allthingsdistributed.com/2008/12/eventually_consistent.html" },
       { label: "AWS — DynamoDB consistency", url: "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadConsistency.html" },
@@ -271,6 +275,7 @@ export const FOUNDATIONS: Concept[] = [
     whenNotToUse:
       "Don't scale out prematurely — distributed-systems complexity (consensus, partitioning, network failures) is real cost. If a bigger instance solves the problem for the next year, scale up.",
     relatedConcepts: ["load-balancer", "sharding", "read-replica", "kubernetes", "availability-nines"],
+    prerequisites: [],
     sources: [
       { label: "AWS — Scalability concepts", url: "https://docs.aws.amazon.com/whitepapers/latest/web-application-hosting-best-practices/scalability.html" },
       { label: "Martin Fowler — Scalability", url: "https://martinfowler.com/bliki/Scalability.html" },
@@ -324,6 +329,7 @@ export const FOUNDATIONS: Concept[] = [
     whenNotToUse:
       "Don't conflate the two — batching raises throughput but adds latency; pipelining helps throughput but not individual request time. If someone says 'make it faster', clarify which dimension before reaching for a tool.",
     relatedConcepts: ["cache", "cdn", "load-balancer", "availability-nines", "back-pressure"],
+    prerequisites: [],
     sources: [
       { label: "Google SRE — Monitoring distributed systems", url: "https://sre.google/sre-book/monitoring-distributed-systems/" },
       { label: "Gil Tene — How NOT to measure latency", url: "https://www.youtube.com/watch?v=lJ8ydIuPFeU" },
@@ -378,6 +384,7 @@ export const FOUNDATIONS: Concept[] = [
     whenNotToUse:
       "Don't chase five nines when three nines are sufficient for your users — each additional nine costs ~10× more in redundancy, operational effort, and deployment constraints. Over-engineering availability wastes money and slows feature velocity.",
     relatedConcepts: ["failover", "load-balancer", "observability", "scaling-types", "cap-theorem"],
+    prerequisites: ["scaling-types"],
     sources: [
       { label: "Google SRE — Embracing risk", url: "https://sre.google/sre-book/embracing-risk/" },
       { label: "Google SRE — Service Level Objectives", url: "https://sre.google/sre-book/service-level-objectives/" },

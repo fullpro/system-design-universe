@@ -112,6 +112,8 @@ export interface Concept {
   whenNotToUse?: string;
   /** Ids of related concepts, rendered as cross-link chips. */
   relatedConcepts?: string[];
+  /** Ids of concepts the learner should understand first. */
+  prerequisites?: string[];
   /** Authoritative references (RFCs, vendor docs, papers). */
   sources?: Source[];
   /** Optional internal architecture revealed when the user zooms in. */
@@ -166,7 +168,97 @@ export interface Solution {
   effect: string;
 }
 
-export type ViewMode = "map" | "internals" | "simulator" | "evolution" | "learn" | "reason" | "studio";
+export type ViewMode = "map" | "internals" | "simulator" | "evolution" | "learn" | "reason" | "studio" | "atlas";
 
 /** Sub-modes inside the Reasoning Engine workspace. */
 export type ReasonTab = "advisor" | "diagnose" | "tradeoff" | "failure" | "compare" | "interview";
+
+/** Sub-modes inside the Real Systems Atlas. */
+export type AtlasTab = "companies" | "technologies" | "evolution" | "graph";
+
+// ── Real Systems Atlas types ──────────────────────────────────────
+
+export type ConfidenceLevel = "verified" | "publicly-disclosed" | "industry-pattern" | "educational-simulation";
+
+export interface ConfidenceInfo {
+  level: ConfidenceLevel;
+  rationale: string;
+}
+
+export interface AtlasSource {
+  type: "rfc" | "documentation" | "engineering-blog" | "conference-talk" | "academic-paper" | "open-source";
+  title: string;
+  url: string;
+  date?: string;
+  publication?: string;
+}
+
+export interface KnownTechnology {
+  name: string;
+  description: string;
+  confidence: ConfidenceInfo;
+  sources: AtlasSource[];
+  conceptIds?: string[];
+}
+
+export interface ArchitectureTimelineEntry {
+  year: number;
+  event: string;
+  problem: string;
+  solution: string;
+  why: string;
+  confidence: ConfidenceInfo;
+  sources: AtlasSource[];
+}
+
+export interface UnknownArea {
+  area: string;
+  note: string;
+}
+
+export interface CompanyProfile {
+  id: string;
+  name: string;
+  icon: string;
+  accent: string;
+  scale: string;
+  coreProducts: string[];
+  knownInfra: string[];
+  technologies: KnownTechnology[];
+  timeline: ArchitectureTimelineEntry[];
+  unknowns: UnknownArea[];
+  sources: AtlasSource[];
+}
+
+export interface TechOrigin {
+  id: string;
+  name: string;
+  icon: string;
+  accent: string;
+  createdBy: string;
+  year: number;
+  inspiredBy?: string;
+  problem: string;
+  motivation: string;
+  confidence: ConfidenceInfo;
+  sources: AtlasSource[];
+  relatedIds: string[];
+  failedApproaches?: string[];
+  designDecisions?: string[];
+  tradeoffs?: string[];
+  industryImpact?: string;
+  conceptIds?: string[];
+}
+
+export interface KnowledgeGraphNode {
+  id: string;
+  label: string;
+  kind: "company" | "technology" | "concept" | "pattern";
+  accent: string;
+}
+
+export interface KnowledgeGraphEdge {
+  source: string;
+  target: string;
+  label: string;
+}

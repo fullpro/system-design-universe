@@ -108,6 +108,25 @@ export const EVOLUTION_STAGES: EvolutionStage[] = [
     ],
   },
   {
+    title: "Add Read Replicas",
+    trigger: "Read load swamps the primary",
+    question: {
+      prompt: "The cache absorbs hot reads, but long-tail queries and reporting still saturate the primary's connection pool. What scales reads further?",
+      options: [
+        { label: "Read replicas off the primary", correct: true, note: "Right — replicas serve read traffic from copies of the data, and double as failover candidates." },
+        { label: "A second write database", correct: false, note: "Two writable primaries create consistency nightmares (split-brain). Replicas are read-only copies." },
+        { label: "More app servers", correct: false, note: "More app servers just send more queries to the same overwhelmed primary." },
+      ],
+    },
+    narrative:
+      "The cache handles hot reads, but cold queries and analytics still pound the primary. Read replicas absorb that remaining read load and provide a warm standby for failover.",
+    complexity: "Replication lag means replicas may serve slightly stale data. Read-your-writes consistency requires routing some reads back to the primary. Monitoring lag and managing replica promotion on failure become new concerns.",
+    addNodes: ["read-replica"],
+    addEdges: [
+      { id: "e-db-rr", source: "database", target: "read-replica", dashed: true, label: "replication", sourceHandle: "sl", targetHandle: "tr" },
+    ],
+  },
+  {
     title: "Add a CDN",
     trigger: "Global users, heavy assets",
     question: {
@@ -149,6 +168,42 @@ export const EVOLUTION_STAGES: EvolutionStage[] = [
     ],
   },
   {
+    title: "Split Read/Write Paths",
+    trigger: "Reads and writes fight for the same resources",
+    question: {
+      prompt: "Reads and writes share one API and compete for the same database connections. Reads want caching and denormalization; writes need strict validation. What separates them?",
+      options: [
+        { label: "Separate read and write API paths (CQRS)", correct: true, note: "Right — let each path scale, cache, and optimize independently. Reads tolerate staleness; writes need consistency." },
+        { label: "A bigger database", correct: false, note: "A bigger box doesn't separate concerns — reads and writes still contend for the same connections." },
+        { label: "More caches", correct: false, note: "More caches help reads but don't address the write path competing for the same resources." },
+      ],
+    },
+    narrative:
+      "Reads and writes pull schemas in opposite directions. Splitting them lets reads cache aggressively and denormalize freely, while writes stay strict and consistent — each scaling on its own terms.",
+    complexity: "You now maintain two code paths and must keep them in sync. The read model lags the write model (eventual consistency). Read-your-own-write scenarios need explicit handling. Two paths means two things to deploy and monitor.",
+    addNodes: [],
+    addEdges: [],
+    labels: { services: "Read + Write Services" },
+  },
+  {
+    title: "Shard the Database",
+    trigger: "Write volume exceeds one primary",
+    question: {
+      prompt: "The single primary's row-level locks and WAL throughput are the ceiling. Replicas don't help — they only scale reads. What scales writes?",
+      options: [
+        { label: "Shard the database by a partition key", correct: true, note: "Right — split the data itself across multiple primaries so writes parallelize instead of contending on one machine." },
+        { label: "More read replicas", correct: false, note: "Replicas only scale reads. Every write still funnels through the one primary." },
+        { label: "A bigger cache", correct: false, note: "The cache handles reads. The bottleneck is write throughput on a single primary." },
+      ],
+    },
+    narrative:
+      "When even a beefy primary can't absorb the write volume, you must split the data itself. Sharding partitions rows across multiple independent primaries so writes parallelize — the last resort and the hardest operational decision.",
+    complexity: "Cross-shard queries and joins become application-level scatter-gathers. Resharding (changing the number of shards) is operationally brutal. A poorly chosen shard key creates hotspots that simply adding more shards won't fix. Distributed transactions across shards require sagas or two-phase commit.",
+    addNodes: [],
+    addEdges: [],
+    labels: { database: "Sharded DB" },
+  },
+  {
     title: "Split into Microservices",
     trigger: "Teams step on each other",
     question: {
@@ -169,6 +224,23 @@ export const EVOLUTION_STAGES: EvolutionStage[] = [
       { id: "e-gw-svc", source: "api-gateway", target: "services" },
     ],
     labels: { services: "Microservices" },
+  },
+  {
+    title: "Add Rate Limiting",
+    trigger: "Abusive traffic and retry storms",
+    question: {
+      prompt: "A buggy client retries every failed request immediately, 1000 times. It's not malicious — but it's taking down your service for everyone. What protects you?",
+      options: [
+        { label: "Rate limiting at the gateway", correct: true, note: "Right — cap requests per client per window. The buggy client gets 429s; everyone else stays healthy." },
+        { label: "More app servers", correct: false, note: "More servers absorb more load but don't stop the retry storm — it just takes longer to overwhelm them." },
+        { label: "A circuit breaker", correct: false, note: "Circuit breakers protect you from slow dependencies, not from clients sending you too much traffic." },
+      ],
+    },
+    narrative:
+      "Rate limiting is the immune system at the front door. It protects shared capacity from abuse, retry storms, and buggy clients — enforcing fairness so one noisy actor can't degrade the service for everyone.",
+    complexity: "Distributed rate limiting needs shared state (usually Redis) across gateway instances. Setting limits too tight blocks legitimate users; too loose and it doesn't protect. Per-client, per-endpoint, and global limits each serve different purposes.",
+    addNodes: [],
+    addEdges: [],
   },
   {
     title: "Orchestrate with Kubernetes",
@@ -223,12 +295,11 @@ export const EVOLUTION_STAGES: EvolutionStage[] = [
     narrative:
       "One region is a single point of failure and a latency floor for distant users. Geo-routing DNS sends users to their nearest region, each a full replica with its own read replicas. You've arrived.",
     complexity: "Cross-region replication lag makes strong consistency across regions extremely expensive. You must choose: route writes to one primary (latency penalty for far users) or accept eventual consistency with conflict resolution. DNS failover, data sovereignty, and region-aware deployments add operational dimensions that didn't exist before.",
-    addNodes: ["dns", "read-replica"],
+    addNodes: ["dns"],
     removeEdges: ["e-cl-lb"],
     addEdges: [
       { id: "e-cl-dns", source: "client", target: "dns" },
       { id: "e-dns-lb", source: "dns", target: "load-balancer", label: "geo-routed" },
-      { id: "e-db-rr", source: "database", target: "read-replica", sourceHandle: "sl", targetHandle: "tr" },
     ],
   },
 ];

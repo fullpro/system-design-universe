@@ -235,6 +235,20 @@ const INFRA_CONCEPTS: Concept[] = [
         { source: "origin", target: "fill" },
         { source: "fill", target: "serve2" },
       ],
+      failures: [
+        {
+          at: "edge",
+          label: "Edge PoP failure",
+          what: "If the nearest edge goes down, users in that region lose the latency benefit and may see errors until traffic reroutes.",
+          recovery: "Anycast routing automatically steers traffic to the next-nearest PoP. The failover is transparent to the client — just slightly higher latency while the closer PoP is down.",
+        },
+        {
+          at: "origin",
+          label: "Origin overload on cache miss storm",
+          what: "If many edge caches expire simultaneously (mass TTL expiry or a purge), all PoPs fetch from origin at once — a thundering herd that can crush the origin server.",
+          recovery: "Stagger TTLs with jitter so caches don't expire in lockstep. Use a shield (mid-tier cache) between edges and origin so only one upstream request per asset reaches the origin.",
+        },
+      ],
     },
   },
 
@@ -407,6 +421,20 @@ const INFRA_CONCEPTS: Concept[] = [
         { source: "rate", target: "route" },
         { source: "route", target: "users", label: "/users" },
         { source: "route", target: "orders", label: "/orders" },
+      ],
+      failures: [
+        {
+          at: "auth",
+          label: "Auth service down",
+          what: "If the authentication service is unreachable, the gateway can't verify tokens and rejects every request — even from legitimate, previously-authenticated users.",
+          recovery: "Cache valid token verifications briefly (JWT signature checks are stateless and cacheable). For non-sensitive endpoints, consider a fail-open policy with degraded auth during brief outages.",
+        },
+        {
+          at: "rate",
+          label: "Rate limiter state lost",
+          what: "If the shared rate-limit counter store (Redis) restarts or loses state, all counters reset to zero — temporarily allowing a burst of traffic through that should have been throttled.",
+          recovery: "Use distributed, replicated counters and accept approximate limits during recovery. Per-node local rate limits provide a floor even when the shared store is unavailable.",
+        },
       ],
     },
   },
@@ -1722,6 +1750,20 @@ const INFRA_CONCEPTS: Concept[] = [
         { source: "synack", target: "ack" },
         { source: "ack", target: "est" },
       ],
+      failures: [
+        {
+          at: "syn",
+          label: "SYN flood attack",
+          what: "An attacker sends a flood of SYN packets without completing the handshake, filling the server's half-open connection table until it can't accept legitimate connections.",
+          recovery: "SYN cookies let the server respond to SYNs statelessly — it encodes the connection info in the SYN-ACK sequence number and only allocates state when the final ACK arrives with a valid cookie.",
+        },
+        {
+          at: "est",
+          label: "Connection reset (RST)",
+          what: "One side crashes or a middlebox drops the connection mid-stream. The other side receives a RST packet (or times out) and loses any in-flight data.",
+          recovery: "Application-level retries with idempotency keys. TCP guarantees delivery within a connection, but connection death requires the application to reconnect and replay — which is only safe if the operation is idempotent.",
+        },
+      ],
     },
   },
 
@@ -1861,6 +1903,20 @@ const INFRA_CONCEPTS: Concept[] = [
         { source: "tls", target: "send" },
         { source: "send", target: "process" },
         { source: "process", target: "response" },
+      ],
+      failures: [
+        {
+          at: "tls",
+          label: "Certificate expired",
+          what: "An expired TLS certificate causes browsers to reject the connection entirely with a scary, unbypassable warning. The site appears completely down to users even though the servers are healthy.",
+          recovery: "Automate certificate renewal with ACME/Let's Encrypt and monitor expiry dates. A cert that expires at 3am on a Saturday is a preventable outage.",
+        },
+        {
+          at: "process",
+          label: "5xx server error",
+          what: "The server fails during processing — an unhandled exception, a database timeout, or an out-of-memory crash. The client receives a 500/502/503 status code.",
+          recovery: "Retry idempotent methods (GET, PUT, DELETE) with backoff. For non-idempotent methods (POST), retry only if the client sent an idempotency key — otherwise the operation may double-apply.",
+        },
       ],
     },
   },
@@ -2115,6 +2171,14 @@ const INFRA_CONCEPTS: Concept[] = [
         { source: "q", target: "doc", label: "nested records" },
         { source: "q", target: "wc", label: "write-heavy" },
         { source: "q", target: "graph", label: "connections" },
+      ],
+      failures: [
+        {
+          at: "q",
+          label: "Wrong store for the access pattern",
+          what: "Choosing a NoSQL family that doesn't match how you actually query leads to expensive workarounds — ad-hoc queries on a wide-column store, joins in a document store, or writes at scale on a graph database.",
+          recovery: "Prototype the real access pattern before committing. Migration between NoSQL families is painful — the data model is shaped for one query pattern and fights a different one.",
+        },
       ],
     },
   },
@@ -2371,6 +2435,14 @@ const INFRA_CONCEPTS: Concept[] = [
         { source: "hash", target: "ring" },
         { source: "ring", target: "walk" },
         { source: "walk", target: "owner" },
+      ],
+      failures: [
+        {
+          at: "walk",
+          label: "Node failure dumps load on neighbour",
+          what: "When a node dies, its entire arc of keys falls to the next clockwise neighbour — potentially doubling that neighbour's load and creating a hotspot or cascade.",
+          recovery: "Replicate keys to multiple clockwise neighbours (replication factor N=3). On failure, load spreads across N-1 nodes instead of concentrating on one. Virtual nodes also help by distributing each server's arc across the ring.",
+        },
       ],
     },
   },
@@ -2631,6 +2703,1056 @@ const INFRA_CONCEPTS: Concept[] = [
       { label: "Celery — Introduction & architecture", url: "https://docs.celeryq.dev/en/stable/getting-started/introduction.html" },
       { label: "AWS — SQS dead-letter queues", url: "https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-dead-letter-queues.html" },
       { label: "Sidekiq — Best practices", url: "https://github.com/sidekiq/sidekiq/wiki/Best-Practices" },
+    ],
+  },
+
+  // ───────────────────────────────────────── Idempotency
+  {
+    id: "idempotency",
+    name: "Idempotency",
+    category: "reliability",
+    icon: "Fingerprint",
+    tagline: "Do it twice, get the same result.",
+    mentalModel: "An elevator call button — pressing it five times doesn't summon five elevators. The first press registers the intent; the rest are harmlessly ignored.",
+    misconception: {
+      myth: "Making an endpoint idempotent means ignoring duplicate requests.",
+      reality: "True idempotency means producing the same outcome — which often requires storing the result of the first attempt and returning it on subsequent calls, not silently dropping them.",
+    },
+    consequenceIfRemoved: "Retries become dangerous. A network timeout after a successful payment could trigger a second charge, a duplicate order, or a double-applied database migration — with no way to tell if the first attempt succeeded.",
+    definition:
+      "An operation is idempotent if performing it multiple times produces the same result as performing it once — making retries, replays and at-least-once delivery safe by construction.",
+    whyItExists:
+      "Networks lose responses, queues deliver twice, and clients retry on timeout. Without idempotency, every retry is a gamble: did the first attempt succeed or not? Idempotency removes the gamble by making the answer the same either way.",
+    problemSolved:
+      "Makes retries and duplicate deliveries safe — the caller can re-send without fear of double-applying the operation.",
+    advantages: [
+      "Retries become safe — no double charges, duplicate records or repeated side effects",
+      "Simplifies at-least-once queue consumers: process the message, ack, and don't worry about redelivery",
+      "Enables aggressive retry strategies that improve reliability without risking correctness",
+      "Naturally composable with circuit breakers, retry budgets and dead-letter queues",
+    ],
+    disadvantages: [
+      "Requires storing idempotency keys and results — another stateful component to manage",
+      "Key storage must be durable and fast (usually Redis or a DB table with TTL)",
+      "Not all operations are naturally idempotent — some need redesigning (e.g. 'increment' vs 'set to X')",
+      "Key expiry window is a design decision: too short and late retries fail, too long and storage grows",
+    ],
+    whenToUse:
+      "For any non-naturally-idempotent operation that can be retried — payments, order placement, message processing, API mutations. If a caller might send the same request twice, make the handler safe for it.",
+    whenNotToUse:
+      "For naturally idempotent operations (GET, PUT, DELETE by ID) where the operation already produces the same result on replay. Adding idempotency machinery to an already-safe operation is needless complexity.",
+    alternatives: [
+      { name: "Natural idempotency", note: "PUT /users/42 is naturally idempotent — re-applying produces the same state" },
+      { name: "Unique constraints", note: "Database unique indexes reject duplicates at the storage layer" },
+      { name: "Deduplication at the consumer", note: "Track processed message IDs in a set" },
+    ],
+    realWorld: [
+      "Stripe's Idempotency-Key header — retry a payment safely",
+      "SQS message deduplication IDs preventing double processing",
+      "PUT vs POST — PUT is naturally idempotent, POST is not",
+    ],
+    interviewQuestions: [
+      "How do you make a payment API idempotent?",
+      "What's the difference between naturally idempotent and artificially idempotent operations?",
+      "How do you handle an idempotency key that arrives after the TTL has expired?",
+    ],
+    scaling:
+      "Idempotency key storage must scale with request rate — usually a Redis SET with TTL, or a database table pruned by expiry. The key space is bounded by the retry window, so it doesn't grow without limit.",
+    relatedConcepts: ["retry", "write-api", "message-queue", "rpc"],
+    sources: [
+      { label: "Stripe — Idempotent requests", url: "https://stripe.com/docs/api/idempotent_requests" },
+      { label: "AWS — Idempotency in serverless", url: "https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/" },
+      { label: "Martin Kleppmann — Designing Data-Intensive Applications", url: "https://dataintensive.net/" },
+    ],
+    internal: {
+      summary: "An idempotency key is checked before processing; hits return the stored result, misses process and store.",
+      nodes: [
+        { id: "req", label: "Request + Key", sublabel: "Idempotency-Key: abc123", kind: "start", detail: "The client sends the request with an idempotency key — a unique identifier (usually a UUID) that represents this specific intent. If the client retries, it sends the same key." },
+        { id: "lookup", label: "Key Lookup", sublabel: "check store", kind: "step", detail: "Before any processing, the server checks whether this key has been seen before. This is typically a Redis GET or a database lookup — fast and atomic." },
+        { id: "seen", label: "Already processed?", kind: "decision", detail: "If the key exists, the operation was already completed. If not, this is the first attempt." },
+        { id: "cached", label: "Return stored result", sublabel: "same response", kind: "terminal", detail: "Key found: return the exact same response as the original request. The caller can't distinguish a fresh response from a replayed one — which is exactly the point." },
+        { id: "process", label: "Process request", sublabel: "execute business logic", kind: "step", detail: "Key not found: this is a fresh request. Execute the business logic — charge the card, create the order, send the notification." },
+        { id: "store", label: "Store key + result", sublabel: "SET key, TTL", kind: "step", detail: "After processing, store the idempotency key and the response together with a TTL. Any future request with the same key returns this stored result." },
+        { id: "respond", label: "Return result", kind: "terminal", detail: "Return the result to the caller. If they retry with the same key, they'll get this exact response back without re-executing the operation." },
+      ],
+      edges: [
+        { source: "req", target: "lookup" },
+        { source: "lookup", target: "seen" },
+        { source: "seen", target: "cached", label: "yes" },
+        { source: "seen", target: "process", label: "no" },
+        { source: "process", target: "store" },
+        { source: "store", target: "respond" },
+      ],
+    },
+  },
+
+  // ───────────────────────────────────────── Consensus & Leader Election
+  {
+    id: "consensus",
+    name: "Consensus & Leader Election",
+    category: "scalability",
+    icon: "Vote",
+    tagline: "Getting distributed nodes to agree.",
+    mentalModel: "A jury deliberation — a majority must agree on the verdict before it's final. One person can't decide alone, and a hung jury (no majority) means no decision at all.",
+    misconception: {
+      myth: "Consensus algorithms like Raft are only for databases.",
+      reality: "Any distributed system that needs a single leader, a consistent configuration, or a coordinated decision uses consensus — leader election, distributed locks, configuration stores, and membership management all depend on it.",
+    },
+    consequenceIfRemoved: "Split-brain: two nodes both believe they're the leader and accept conflicting writes. Data diverges, and there's no automatic way to reconcile — the worst failure mode in a distributed system.",
+    definition:
+      "Consensus is a protocol that lets a group of distributed nodes agree on a single value (or leader) despite failures, ensuring that once a majority commits, the decision is durable and consistent — even if minority nodes crash or are partitioned.",
+    whyItExists:
+      "In a distributed system, no single node can be trusted to make decisions alone — it might crash or be partitioned. Consensus lets a majority agree, so the system makes progress as long as most nodes are alive, and never commits conflicting decisions.",
+    problemSolved:
+      "Provides a single, agreed-upon leader or value across distributed nodes, preventing split-brain and ensuring consistent state even during partial failures.",
+    advantages: [
+      "Prevents split-brain — only one leader at a time, guaranteed by majority vote",
+      "Tolerates minority failures — the system makes progress with ⌊N/2⌋+1 nodes alive",
+      "Durable decisions — once a majority commits, the value survives crashes",
+      "Understandable (Raft) — designed to be implementable correctly, unlike Paxos",
+    ],
+    disadvantages: [
+      "Requires a majority — a 3-node cluster tolerates 1 failure, not 2",
+      "Latency: every write must be acknowledged by a majority before committing",
+      "Availability drops during a partition if the minority side can't reach a quorum",
+      "Operationally complex — membership changes and log compaction are subtle",
+    ],
+    whenToUse:
+      "Whenever you need exactly one leader, a consistent configuration store, or coordinated distributed decisions — database primary election, distributed lock services, cluster membership, and configuration management.",
+    whenNotToUse:
+      "For data that can tolerate eventual consistency — consensus adds latency and reduces availability during partitions. If you can use a leaderless, AP design (Cassandra, DynamoDB), you avoid the coordination cost entirely.",
+    alternatives: [
+      { name: "Leaderless replication", note: "Cassandra/DynamoDB — no leader election, eventual consistency" },
+      { name: "External coordination", note: "ZooKeeper/etcd as a shared consensus service" },
+      { name: "Manual failover", note: "A human picks the new leader — simple but slow and error-prone" },
+    ],
+    realWorld: [
+      "etcd (Raft) backing Kubernetes cluster state",
+      "ZooKeeper (ZAB) for Kafka leader election and configuration",
+      "CockroachDB using Raft per range for distributed SQL consensus",
+    ],
+    interviewQuestions: [
+      "Walk through a Raft leader election.",
+      "What happens during a network partition in a 5-node Raft cluster?",
+      "Why does consensus require a majority, not unanimity?",
+    ],
+    scaling:
+      "Consensus is inherently latency-bound by the quorum round-trip. It scales reads (followers can serve stale reads) but not writes (all go through the leader). For write-heavy workloads, shard the data so each shard has its own independent consensus group.",
+    relatedConcepts: ["failover", "database", "cap-theorem", "consistency-models", "distributed-lock"],
+    sources: [
+      { label: "Raft — In Search of an Understandable Consensus Algorithm", url: "https://raft.github.io/raft.pdf" },
+      { label: "Google — Paxos Made Live", url: "https://research.google/pubs/paxos-made-live-an-engineering-perspective/" },
+      { label: "Martin Kleppmann — Designing Data-Intensive Applications (Ch. 9)", url: "https://dataintensive.net/" },
+    ],
+    internal: {
+      summary: "A candidate requests votes from peers; a majority grants leadership; the leader replicates entries and heartbeats to maintain authority.",
+      nodes: [
+        { id: "timeout", label: "Election Timeout", sublabel: "no heartbeat received", kind: "start", detail: "A follower hasn't heard from the leader within the election timeout. It assumes the leader is dead and starts a new election by incrementing the term and voting for itself." },
+        { id: "candidate", label: "Become Candidate", sublabel: "request votes", kind: "step", detail: "The node sends RequestVote RPCs to all peers, asking for their vote in this term. Each node votes for at most one candidate per term — first-come-first-served." },
+        { id: "majority", label: "Majority votes?", kind: "decision", detail: "If the candidate receives votes from a majority of nodes (including itself), it becomes the leader. If not (split vote or timeout), a new election starts with a higher term." },
+        { id: "leader", label: "Become Leader", sublabel: "send heartbeats", kind: "step", detail: "The new leader immediately sends heartbeats to all followers to assert authority and prevent new elections. It now handles all client writes." },
+        { id: "replicate", label: "Replicate Entries", sublabel: "AppendEntries RPC", kind: "step", detail: "Client writes are appended to the leader's log and replicated to followers via AppendEntries. Once a majority acknowledges, the entry is committed — durable even if the leader crashes." },
+        { id: "committed", label: "Entry Committed", sublabel: "majority acknowledged", kind: "terminal", detail: "The committed entry is applied to the state machine. Followers apply it when they learn it's committed. The leader responds to the client with success." },
+      ],
+      edges: [
+        { source: "timeout", target: "candidate" },
+        { source: "candidate", target: "majority" },
+        { source: "majority", target: "leader", label: "yes" },
+        { source: "majority", target: "candidate", label: "no — retry" },
+        { source: "leader", target: "replicate" },
+        { source: "replicate", target: "committed" },
+      ],
+      failures: [
+        {
+          at: "leader",
+          label: "Leader crashes",
+          what: "If the leader dies, followers stop receiving heartbeats and a new election triggers. In-flight uncommitted entries may be lost; committed entries are safe on the majority.",
+          recovery: "Election timeout fires on the most up-to-date follower, which wins the next election. Committed entries are preserved; uncommitted ones are replayed from the new leader's log.",
+        },
+        {
+          at: "majority",
+          label: "No majority reachable",
+          what: "If a network partition leaves less than a majority on either side, neither side can elect a leader — the system halts writes to preserve consistency.",
+          recovery: "This is CAP in action: the system chose consistency over availability. Writes resume when the partition heals and a majority can communicate again.",
+        },
+      ],
+    },
+  },
+
+  // ───────────────────────────────────────── Sagas
+  {
+    id: "sagas",
+    name: "Sagas",
+    category: "reliability",
+    icon: "GitPullRequest",
+    tagline: "Distributed transactions via compensating actions.",
+    mentalModel: "Booking a holiday — you reserve a flight, then a hotel, then a car. If the car rental falls through, you cancel the hotel, then cancel the flight. Each step has an explicit undo, and you work backwards through the chain.",
+    misconception: {
+      myth: "A saga gives you ACID transactions across services.",
+      reality: "Sagas provide eventual consistency through compensations, not atomicity. Intermediate states are visible to other transactions, and compensations can themselves fail — you trade ACID guarantees for cross-service coordination.",
+    },
+    consequenceIfRemoved: "Cross-service operations become all-or-nothing gambles. A payment charges but the order never creates; inventory reserves but shipping never triggers. Partial completions leave the system in an inconsistent state with no automated recovery path.",
+    definition:
+      "A saga is a sequence of local transactions across services where each step has a compensating action. If any step fails, the saga executes compensations in reverse order to undo the work of prior steps, achieving eventual consistency without distributed locks.",
+    whyItExists:
+      "Distributed systems can't use a single database transaction across services — there's no shared transaction coordinator. Sagas decompose a long-lived business process into local transactions that each own their undo logic, so failures unwind cleanly without locking resources across services.",
+    problemSolved:
+      "Coordinates multi-service business processes (order → payment → inventory → shipping) with reliable rollback when any step fails, without requiring two-phase commit or distributed locks.",
+    advantages: [
+      "No distributed locks — each service commits locally and moves on, preserving autonomy",
+      "Explicit compensation logic makes failure recovery visible and testable",
+      "Works across heterogeneous services with different databases and technologies",
+      "Choreography sagas are fully decoupled — services react to events, no central coordinator",
+    ],
+    disadvantages: [
+      "Intermediate states are visible — other transactions can read partially-completed data",
+      "Compensations can fail too, requiring their own retry and idempotency logic",
+      "Orchestration sagas add a central coordinator that becomes a single point of failure if not designed carefully",
+      "Debugging a failed saga across services requires correlated tracing and clear compensation logs",
+    ],
+    whenToUse:
+      "For multi-service business processes where each service owns its own data — order fulfillment, travel booking, payment processing. Use orchestration when you need central visibility; use choreography when services should stay fully decoupled.",
+    whenNotToUse:
+      "When a single database can handle the transaction (just use ACID), or when you need strict isolation between concurrent sagas — sagas don't prevent dirty reads of intermediate states. Also avoid for simple two-service calls where a retry is sufficient.",
+    alternatives: [
+      { name: "Two-phase commit (2PC)", note: "True distributed atomicity, but blocks on coordinator failure and doesn't scale" },
+      { name: "Outbox pattern", note: "Reliable event publishing from a single service without 2PC" },
+      { name: "Manual reconciliation", note: "Batch jobs that detect and fix inconsistencies after the fact" },
+    ],
+    realWorld: [
+      "Order fulfillment: reserve inventory → charge payment → schedule shipping — compensate in reverse on failure",
+      "Travel booking engines coordinating flights, hotels and car rentals across independent providers",
+      "Uber trip lifecycle: match rider → dispatch driver → start trip → charge — each step compensable",
+    ],
+    interviewQuestions: [
+      "Choreography vs orchestration sagas — when do you pick each?",
+      "What happens if a compensation action itself fails?",
+      "How do sagas differ from two-phase commit, and why do microservices prefer sagas?",
+    ],
+    scaling:
+      "Choreography sagas scale naturally — each service listens to events independently. Orchestration sagas scale by making the orchestrator stateless (persisting saga state to a database) and running multiple instances behind a load balancer. Either way, each local transaction is independent, so throughput scales with the services.",
+    relatedConcepts: ["acid", "services", "message-queue", "idempotency"],
+    sources: [
+      { label: "Chris Richardson — Saga pattern", url: "https://microservices.io/patterns/data/saga.html" },
+      { label: "Caitie McCaffrey — Applying the Saga Pattern (talk)", url: "https://www.youtube.com/watch?v=xDuwrtwYHu8" },
+      { label: "AWS — Saga orchestration pattern", url: "https://docs.aws.amazon.com/prescriptive-guidance/latest/modernization-data-persistence/saga-pattern.html" },
+    ],
+    internal: {
+      summary: "Each step executes a local transaction; on failure, compensations run in reverse to undo prior steps.",
+      nodes: [
+        { id: "start", label: "Start Saga", sublabel: "order placed", kind: "start", detail: "A business event triggers the saga — for example, a customer places an order. The saga orchestrator (or the first service in a choreography) kicks off the sequence of local transactions." },
+        { id: "step1", label: "Step 1: Reserve", sublabel: "inventory service", kind: "step", detail: "The first service executes its local transaction — reserving inventory. It commits locally and emits a success event (or calls the next service in orchestration)." },
+        { id: "step2", label: "Step 2: Charge", sublabel: "payment service", kind: "step", detail: "The payment service charges the customer. This is another local transaction — committed independently. If it succeeds, the saga moves forward." },
+        { id: "step3", label: "Step 3: Ship", sublabel: "shipping service", kind: "step", detail: "The shipping service schedules delivery. If this step succeeds, the saga is complete. But if it fails, the saga must compensate all prior steps." },
+        { id: "failed", label: "Step failed?", kind: "decision", detail: "At any point, a step can fail — the shipping provider is down, inventory was already sold, or the payment was declined. The saga must decide: continue or compensate." },
+        { id: "comp2", label: "Compensate: Refund", sublabel: "payment service", kind: "step", detail: "The compensation for Step 2: issue a refund. Each compensation must be idempotent — it might be called more than once if the saga coordinator retries." },
+        { id: "comp1", label: "Compensate: Release", sublabel: "inventory service", kind: "step", detail: "The compensation for Step 1: release the reserved inventory. Compensations run in reverse order — last committed, first undone." },
+        { id: "done", label: "Saga Complete", kind: "terminal", detail: "All steps succeeded — the order is fulfilled, payment collected, and shipment scheduled. The saga is done." },
+        { id: "rolled", label: "Saga Rolled Back", kind: "terminal", detail: "All compensations have run. The system is back to a consistent state — no charge, no reservation, no shipment. The customer is notified of the failure." },
+      ],
+      edges: [
+        { source: "start", target: "step1" },
+        { source: "step1", target: "step2" },
+        { source: "step2", target: "step3" },
+        { source: "step3", target: "failed" },
+        { source: "failed", target: "done", label: "no" },
+        { source: "failed", target: "comp2", label: "yes" },
+        { source: "comp2", target: "comp1" },
+        { source: "comp1", target: "rolled" },
+      ],
+      failures: [
+        {
+          at: "comp2",
+          label: "Compensation fails",
+          what: "The refund call to the payment service times out. The customer has been charged but the order won't be fulfilled — the worst partial state.",
+          recovery: "Compensations must be retried with exponential backoff and must be idempotent. A dead-letter queue captures permanently failed compensations for manual intervention.",
+        },
+      ],
+    },
+  },
+
+  // ───────────────────────────────────────── Event Sourcing
+  {
+    id: "event-sourcing",
+    name: "Event Sourcing",
+    category: "data",
+    icon: "History",
+    tagline: "Store events, not state — replay to rebuild.",
+    mentalModel: "A bank ledger — you never overwrite a balance. Instead, every deposit, withdrawal and transfer is an immutable line item. The current balance is derived by replaying the ledger from the beginning (or from a snapshot).",
+    misconception: {
+      myth: "Event sourcing is just an audit log.",
+      reality: "An audit log records what happened alongside mutable state. Event sourcing makes the events the source of truth — the current state is a projection derived from the log, not stored independently. Losing the events means losing everything.",
+    },
+    consequenceIfRemoved: "You lose the ability to answer 'how did we get here?' State overwrites destroy history, making debugging, auditing, and retroactive corrections impossible. You can never replay past decisions or build new read models from old data.",
+    definition:
+      "Event sourcing persists every state change as an immutable event in an append-only log. The current state of an entity is derived by replaying its event stream — making the event log the authoritative source of truth, not a side-effect.",
+    whyItExists:
+      "Traditional CRUD overwrites state, destroying history. Event sourcing preserves every change, enabling full audit trails, temporal queries ('what was the balance on March 1st?'), and the ability to build new read models retroactively by replaying the log.",
+    problemSolved:
+      "Provides a complete, immutable history of every state change, enabling replay-based state reconstruction, retroactive projections, and debuggable audit trails.",
+    advantages: [
+      "Complete audit trail — every change is recorded with its intent, not just the final state",
+      "Temporal queries: reconstruct state at any point in time by replaying events up to that moment",
+      "New read models can be built retroactively by replaying the event log through a new projection",
+      "Natural fit with CQRS — events feed projections that serve reads, decoupling write and read models",
+    ],
+    disadvantages: [
+      "Event schema evolution is hard — old events must remain parseable as the schema changes over time",
+      "Replaying a long event stream is slow without snapshots, adding operational complexity",
+      "Eventual consistency between the event store and read projections — queries may lag behind writes",
+      "Significantly more complex than CRUD for simple domains where history isn't valuable",
+    ],
+    whenToUse:
+      "For domains where history and auditability are core requirements — financial systems, regulatory compliance, collaborative editing. Also when you need to build new read models from existing data, or when CQRS benefits from an event-driven write side.",
+    whenNotToUse:
+      "For simple CRUD applications where the current state is all that matters and history has no business value. The complexity of event versioning, snapshots, and projections isn't justified when a mutable row in a database would suffice.",
+    alternatives: [
+      { name: "CRUD with audit log", note: "Mutable state plus a side-table recording changes — simpler, but the audit log isn't the source of truth" },
+      { name: "Change Data Capture (CDC)", note: "Capture changes from the database log (WAL) and stream them — less invasive than full event sourcing" },
+      { name: "Temporal tables", note: "Database-level versioning (SQL:2011) — automatic history without application-level event modeling" },
+    ],
+    realWorld: [
+      "Banking ledgers — every transaction is an event, the balance is a projection",
+      "Event-sourced order systems (e.g. Axon Framework) replaying OrderPlaced, ItemAdded, OrderShipped",
+      "Git — every commit is an immutable event; the working tree is a projection of the commit log",
+    ],
+    interviewQuestions: [
+      "How does event sourcing differ from an audit log, and when does the distinction matter?",
+      "How do you handle event schema changes when old events are immutable?",
+      "What are snapshots in event sourcing, and when do you need them?",
+    ],
+    scaling:
+      "The event store is append-only, which scales well for writes. Read performance depends on projections — pre-materialized read models that update asynchronously as events arrive. Snapshots bound replay time for entities with long event histories. Partition the event log by aggregate ID to scale horizontally.",
+    relatedConcepts: ["cqrs", "message-queue", "database"],
+    sources: [
+      { label: "Martin Fowler — Event Sourcing", url: "https://martinfowler.com/eaaDev/EventSourcing.html" },
+      { label: "Greg Young — CQRS and Event Sourcing", url: "https://cqrs.files.wordpress.com/2010/11/cqrs_documents.pdf" },
+      { label: "EventStoreDB — Introduction", url: "https://www.eventstore.com/event-sourcing" },
+    ],
+    internal: {
+      summary: "A command is validated, appended as an event, and projected into a read model for queries.",
+      nodes: [
+        { id: "cmd", label: "Command", sublabel: "PlaceOrder", kind: "start", detail: "A command represents the intent to change state — 'place this order'. It carries the data needed to validate and execute the action." },
+        { id: "load", label: "Load Aggregate", sublabel: "replay events", kind: "step", detail: "The aggregate (e.g. an Order) is reconstituted by replaying its past events from the event store. There's no mutable row — the current state is rebuilt from the event stream (or from the last snapshot)." },
+        { id: "validate", label: "Validate", sublabel: "business rules", kind: "decision", detail: "The command is validated against the current aggregate state. Can the order be placed? Is there sufficient inventory? If validation fails, no event is emitted." },
+        { id: "reject", label: "Reject", sublabel: "return error", kind: "terminal", detail: "Validation failed — the command is rejected and no event is appended. The system state is unchanged." },
+        { id: "append", label: "Append Event", sublabel: "OrderPlaced", kind: "step", detail: "Validation passed: an immutable event (OrderPlaced) is appended to the event store. This is the atomic commit — once appended, the event is the source of truth." },
+        { id: "project", label: "Project", sublabel: "update read model", kind: "step", detail: "An event handler reads the new event and updates a read-optimized projection (e.g. a denormalized orders table). This happens asynchronously — the read model is eventually consistent." },
+        { id: "query", label: "Query Read Model", kind: "terminal", detail: "Clients query the projection for fast reads. The read model is optimized for the query pattern — different projections can serve different views of the same event stream." },
+      ],
+      edges: [
+        { source: "cmd", target: "load" },
+        { source: "load", target: "validate" },
+        { source: "validate", target: "reject", label: "fail" },
+        { source: "validate", target: "append", label: "pass" },
+        { source: "append", target: "project" },
+        { source: "project", target: "query" },
+      ],
+    },
+  },
+
+  // ───────────────────────────────────────── Distributed Locks
+  {
+    id: "distributed-lock",
+    name: "Distributed Locks",
+    category: "scalability",
+    icon: "Lock",
+    tagline: "One node at a time — across the cluster.",
+    mentalModel: "A bathroom key at a coffee shop — only one customer can hold it at a time. If they vanish with the key, the barista hands out a new one after a timeout. The key itself enforces mutual exclusion without the customers needing to coordinate.",
+    misconception: {
+      myth: "A Redis SETNX lock is safe for critical sections.",
+      reality: "A single-node Redis lock can fail silently during a failover — the new primary doesn't have the lock, and two clients proceed simultaneously. For true safety, you need fencing tokens or a quorum-based protocol like Redlock.",
+    },
+    consequenceIfRemoved: "Concurrent nodes modify the same shared resource simultaneously — double-spending money, over-selling inventory, or corrupting a file. Any operation that requires exclusive access becomes a race condition.",
+    definition:
+      "A distributed lock provides mutual exclusion across processes running on different machines, ensuring that only one node can execute a critical section or access a shared resource at a time — with timeouts to prevent deadlocks from crashed holders.",
+    whyItExists:
+      "In-process mutexes don't work across machines. When multiple service instances need exclusive access to a shared resource — a database row, an external API, a file — a distributed lock serializes access so only one instance proceeds at a time.",
+    problemSolved:
+      "Prevents concurrent access to shared resources across distributed nodes, avoiding race conditions, double-processing and data corruption.",
+    advantages: [
+      "Enforces mutual exclusion across machines — only one holder at a time, cluster-wide",
+      "TTL prevents deadlocks: if the holder crashes, the lock auto-expires and another node can acquire it",
+      "Fencing tokens detect stale holders that continue operating after their lock expired",
+      "Well-understood pattern with battle-tested implementations (Redis, ZooKeeper, etcd)",
+    ],
+    disadvantages: [
+      "Single-node locks (Redis SETNX) can fail during failover — the lock vanishes with the old primary",
+      "Clock skew can cause TTL-based locks to expire early on fast clocks, breaking mutual exclusion",
+      "Adds latency to the critical path — every lock acquisition is a network round-trip",
+      "Debugging lock contention and deadlocks across services is significantly harder than in-process locks",
+    ],
+    whenToUse:
+      "When exactly one node must perform an operation — scheduling a cron job across replicas, processing a payment, migrating a database, or accessing a non-idempotent external API. Use fencing tokens for any operation where a stale lock could cause harm.",
+    whenNotToUse:
+      "When idempotency can replace locking — if the operation produces the same result regardless of who runs it, you don't need exclusive access. Also avoid for high-throughput paths where lock contention becomes a bottleneck; consider optimistic concurrency (CAS) instead.",
+    alternatives: [
+      { name: "Optimistic concurrency (CAS)", note: "Compare-and-swap at the storage layer — no lock, retry on conflict" },
+      { name: "Idempotency", note: "Make the operation safe to run multiple times, eliminating the need for exclusion" },
+      { name: "Database advisory locks", note: "Postgres pg_advisory_lock for simple cases within one database" },
+    ],
+    realWorld: [
+      "Redis SETNX + TTL for leader election among cron-job runners",
+      "ZooKeeper ephemeral nodes for Kafka partition leader locks",
+      "Redlock algorithm for quorum-based locking across Redis nodes",
+    ],
+    interviewQuestions: [
+      "What can go wrong with a single-node Redis lock during a failover?",
+      "What is a fencing token and how does it prevent stale-lock corruption?",
+      "How does the Redlock algorithm improve on a single-node Redis lock?",
+    ],
+    scaling:
+      "Distributed locks are inherently serializing — they're a throughput bottleneck by design. Minimize the critical section, keep TTLs short, and partition locks by resource (e.g. one lock per order ID, not a global lock) to maximize parallelism.",
+    relatedConcepts: ["cache", "consensus", "idempotency"],
+    sources: [
+      { label: "Martin Kleppmann — How to do distributed locking", url: "https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html" },
+      { label: "Redis — Distributed Locks with Redis (Redlock)", url: "https://redis.io/docs/manual/patterns/distributed-locks/" },
+      { label: "Apache ZooKeeper — Recipes: Locks", url: "https://zookeeper.apache.org/doc/current/recipes.html#sc_recipes_Locks" },
+    ],
+    internal: {
+      summary: "A client acquires a lock with a TTL, performs exclusive work, and releases it — with fencing tokens guarding against stale holders.",
+      nodes: [
+        { id: "request", label: "Acquire Lock", sublabel: "SETNX key, TTL", kind: "start", detail: "The client attempts to acquire the lock by setting a key in Redis (or creating an ephemeral node in ZooKeeper) with a TTL. If the key already exists, the lock is held by someone else." },
+        { id: "acquired", label: "Lock acquired?", kind: "decision", detail: "If SET NX succeeds, the client holds the lock. If it fails, the lock is already held — the client must wait, retry with backoff, or give up." },
+        { id: "wait", label: "Wait / Retry", sublabel: "backoff", kind: "step", detail: "The lock is held by another client. Wait for it to expire or be released, then retry. Use exponential backoff to avoid thundering-herd contention." },
+        { id: "fence", label: "Get Fencing Token", sublabel: "monotonic counter", kind: "step", detail: "On acquisition, the lock service returns a fencing token — a monotonically increasing number. The client passes this token to downstream resources, which reject requests with an older token." },
+        { id: "work", label: "Critical Section", sublabel: "exclusive work", kind: "step", detail: "The client performs the work that requires exclusive access — updating a database row, calling an external API, or processing a job. Keep this section as short as possible to reduce contention." },
+        { id: "release", label: "Release Lock", sublabel: "DEL key", kind: "step", detail: "After completing the work, the client deletes the lock key (only if it still owns it — check the value matches). If the TTL already expired, the lock was auto-released." },
+        { id: "done", label: "Done", kind: "terminal", detail: "The lock is released and the next waiting client can acquire it. If the holder crashed, the TTL ensures the lock is eventually freed." },
+      ],
+      edges: [
+        { source: "request", target: "acquired" },
+        { source: "acquired", target: "wait", label: "no" },
+        { source: "wait", target: "request" },
+        { source: "acquired", target: "fence", label: "yes" },
+        { source: "fence", target: "work" },
+        { source: "work", target: "release" },
+        { source: "release", target: "done" },
+      ],
+      failures: [
+        {
+          at: "work",
+          label: "Lock holder crashes",
+          what: "The client crashes mid-work. Without TTL, the lock would be held forever, blocking all other clients (deadlock).",
+          recovery: "The TTL auto-expires the lock after the timeout. The next client acquires it and resumes. Fencing tokens ensure the crashed client's late writes (if any) are rejected by downstream resources.",
+        },
+      ],
+    },
+  },
+
+  // ───────────────────────────────────────── Connection Pooling
+  {
+    id: "connection-pool",
+    name: "Connection Pooling",
+    category: "application",
+    icon: "Plug",
+    tagline: "Reuse connections instead of rebuilding them.",
+    mentalModel: "A car-share fleet — instead of buying a car for every trip, you check one out from a shared lot, drive it, and return it. The lot maintains a fixed number of cars so the roads (and parking) don't get overwhelmed.",
+    misconception: {
+      myth: "Just increase the pool size when you see connection errors.",
+      reality: "A bigger pool often makes things worse — more connections mean more memory on the database, more context switching, and longer wait times under contention. The right fix is usually fewer, better-utilized connections and shorter hold times.",
+    },
+    consequenceIfRemoved: "Every request opens a new TCP connection, performs the TLS handshake, and authenticates — adding 10-50ms of overhead per query. Under load, the database is overwhelmed by connection storms and starts refusing new connections entirely.",
+    definition:
+      "Connection pooling maintains a cache of reusable database (or service) connections, lending them to callers on demand and returning them to the pool after use — amortizing the expensive cost of connection setup across many requests.",
+    whyItExists:
+      "Opening a database connection is expensive: TCP handshake, TLS negotiation, authentication, and server-side memory allocation. Doing this per-request is wasteful and doesn't scale. A pool creates connections once and reuses them thousands of times.",
+    problemSolved:
+      "Eliminates per-request connection overhead and bounds the number of simultaneous connections to the database, preventing connection storms and protecting the database from overload.",
+    advantages: [
+      "Dramatic latency reduction — reusing a warm connection avoids the 10-50ms setup cost per query",
+      "Bounds database connections — the pool size caps how many connections the application opens, protecting the DB",
+      "Enables connection health checking — the pool can validate connections before lending them, discarding broken ones",
+      "Transparent to application code — the caller gets a connection and returns it, unaware of the pooling",
+    ],
+    disadvantages: [
+      "Pool exhaustion: if all connections are in use and the pool is full, callers block or fail until one is returned",
+      "Connection leaks: forgetting to return a connection (missing finally/close) slowly drains the pool until it's empty",
+      "Stale connections: a pooled connection can be silently broken (server restart, firewall timeout) and fail on next use",
+      "Sizing is non-trivial — too small starves callers, too large overwhelms the database with context-switching overhead",
+    ],
+    whenToUse:
+      "Whenever your application talks to a database, cache, or external service over persistent connections — which is nearly always. Connection pooling is a default, not an optimization. Use PgBouncer, HikariCP, or your framework's built-in pool.",
+    whenNotToUse:
+      "For serverless functions with very short lifetimes and low concurrency, where the pool would be created and destroyed per invocation — use an external pooler (PgBouncer, RDS Proxy) instead. Also unnecessary for connectionless protocols like HTTP/1.0 without keep-alive.",
+    alternatives: [
+      { name: "External connection pooler", note: "PgBouncer, ProxySQL, RDS Proxy — pool at the infrastructure layer, not in the app" },
+      { name: "Connection-per-request", note: "Simplest model, fine at low volume, catastrophic at scale" },
+      { name: "Multiplexing (HTTP/2, gRPC)", note: "Multiple requests over a single connection — pooling at the protocol layer" },
+    ],
+    realWorld: [
+      "HikariCP — the default JDBC pool for Spring Boot, tuned for minimal overhead",
+      "PgBouncer sitting between thousands of serverless functions and a single Postgres instance",
+      "Node.js pg Pool managing a fixed set of Postgres connections across async requests",
+    ],
+    interviewQuestions: [
+      "What happens when the connection pool is exhausted — and how do you diagnose it?",
+      "How do you size a connection pool, and why is bigger not always better?",
+      "What is a connection leak and how do you detect one?",
+    ],
+    scaling:
+      "Pool size should match the database's ability to handle concurrent connections, not the application's desire for them. A common formula: connections = (core_count * 2) + disk_spindles. Beyond that, add an external pooler (PgBouncer) to multiplex thousands of application connections onto a smaller set of database connections.",
+    relatedConcepts: ["database", "tcp"],
+    sources: [
+      { label: "HikariCP — About Pool Sizing", url: "https://github.com/brettwooldridge/HikariCP/wiki/About-Pool-Sizing" },
+      { label: "PgBouncer — Lightweight connection pooler for PostgreSQL", url: "https://www.pgbouncer.org/" },
+      { label: "PostgreSQL — Connection limits and resource usage", url: "https://www.postgresql.org/docs/current/runtime-config-connection.html" },
+    ],
+  },
+
+  // ───────────────────────────────────────── Service Discovery
+  {
+    id: "service-discovery",
+    name: "Service Discovery",
+    category: "application",
+    icon: "Search",
+    tagline: "Find services without hardcoding addresses.",
+    mentalModel: "A hotel concierge — you ask for 'a good restaurant nearby', not for '42 Oak Street'. The concierge knows what's open, what's closed, and what's good right now. Services register themselves; callers ask the registry.",
+    misconception: {
+      myth: "Service discovery is just internal DNS.",
+      reality: "DNS returns IP addresses and caches aggressively. Service discovery registries return live, health-checked endpoints with metadata (version, region, weight) and react to changes in seconds, not minutes. DNS is a building block, not a replacement.",
+    },
+    consequenceIfRemoved: "Service locations must be hardcoded in configuration files. Every deployment, scaling event, or failure requires manual config updates across all callers — turning routine operations into error-prone, coordinated changes.",
+    definition:
+      "Service discovery is the mechanism by which services register their network locations and clients find healthy instances dynamically — replacing static configuration with a live registry that reflects the current state of the infrastructure.",
+    whyItExists:
+      "In a dynamic environment (containers, autoscaling, rolling deploys), service instances come and go constantly. Hardcoding addresses breaks on every change. Service discovery decouples callers from specific instances, letting the infrastructure scale and heal without config updates.",
+    problemSolved:
+      "Enables clients to find healthy service instances dynamically, without hardcoded addresses, making scaling, deployments and failure recovery transparent to callers.",
+    advantages: [
+      "Dynamic: new instances register automatically, failed ones are removed — no config changes needed",
+      "Health-aware: only healthy instances are returned, so callers don't hit dead endpoints",
+      "Metadata-rich: registries can expose version, region, canary tags and weights alongside addresses",
+      "Enables advanced traffic management — blue/green, canary and A/B routing based on registry metadata",
+    ],
+    disadvantages: [
+      "The registry itself becomes a critical dependency — if it's down, no one can find anyone",
+      "Stale registrations: a service that's running but unhealthy (zombie) must be detected and deregistered",
+      "Client-side caching of results can lead to stale endpoints and uneven load distribution",
+      "Adds operational complexity — another system to deploy, monitor and keep highly available",
+    ],
+    whenToUse:
+      "In any environment with dynamic service instances — Kubernetes, container orchestration, autoscaling groups. Essential for microservices architectures where tens to hundreds of services need to find each other without manual configuration.",
+    whenNotToUse:
+      "For a small, static deployment with a handful of services on fixed hosts — a config file or DNS CNAME is simpler and sufficient. Don't introduce a registry for three services that never move.",
+    alternatives: [
+      { name: "DNS with health checks", note: "Route 53, Cloudflare — works for stable, less dynamic environments" },
+      { name: "Load balancer as registry", note: "Register behind an ALB/NLB; callers hit one stable endpoint" },
+      { name: "Static configuration", note: "Config files or environment variables — simple but rigid" },
+    ],
+    realWorld: [
+      "Consul — service mesh and discovery with health checks, KV store and DNS interface",
+      "Kubernetes kube-dns/CoreDNS — every Service gets a DNS name backed by live endpoint tracking",
+      "Netflix Eureka — client-side discovery for Spring Cloud microservices",
+    ],
+    interviewQuestions: [
+      "Client-side vs server-side service discovery — what are the tradeoffs?",
+      "How does service discovery handle a service that's running but unhealthy?",
+      "Why isn't DNS sufficient for service discovery in a container orchestration environment?",
+    ],
+    scaling:
+      "The registry must be highly available — run it as a replicated cluster (Consul uses Raft, etcd uses Raft, ZooKeeper uses ZAB). Reads scale with replicas; writes go through the leader. Client-side caching reduces registry load but introduces staleness.",
+    relatedConcepts: ["dns", "load-balancer", "kubernetes"],
+    sources: [
+      { label: "Consul — Service Discovery", url: "https://developer.hashicorp.com/consul/docs/concepts/service-discovery" },
+      { label: "Kubernetes — Service and DNS concepts", url: "https://kubernetes.io/docs/concepts/services-networking/service/" },
+      { label: "Chris Richardson — Service Discovery Patterns", url: "https://microservices.io/patterns/service-registry.html" },
+    ],
+    internal: {
+      summary: "Services self-register on startup; clients query the registry for healthy instances; health checks prune dead entries.",
+      nodes: [
+        { id: "boot", label: "Service Starts", sublabel: "instance boots", kind: "start", detail: "A new service instance starts up — from a deployment, autoscaling event, or restart. It needs to announce its existence so clients can find it." },
+        { id: "register", label: "Register", sublabel: "POST /register", kind: "step", detail: "The service registers itself with the discovery registry, providing its address, port, health endpoint, and metadata (version, region, tags). The registration includes a TTL or lease." },
+        { id: "health", label: "Health Check", sublabel: "periodic probe", kind: "step", detail: "The registry periodically probes the service's health endpoint (or the service sends heartbeats). If checks fail, the instance is marked unhealthy and eventually deregistered." },
+        { id: "query", label: "Client Queries", sublabel: "GET /services/payment", kind: "step", detail: "A client asks the registry for instances of a service (e.g. 'payment-service'). The registry returns only healthy instances, optionally filtered by metadata." },
+        { id: "call", label: "Call Instance", sublabel: "client → service", kind: "step", detail: "The client picks an instance from the returned list (round-robin, random, weighted) and makes the call. Client-side load balancing happens here." },
+        { id: "deregister", label: "Deregister", sublabel: "shutdown or TTL expiry", kind: "terminal", detail: "When the service shuts down gracefully, it deregisters. If it crashes, the TTL expires and the registry removes it automatically — ensuring callers stop routing to dead instances." },
+      ],
+      edges: [
+        { source: "boot", target: "register" },
+        { source: "register", target: "health" },
+        { source: "health", target: "query" },
+        { source: "query", target: "call" },
+        { source: "health", target: "deregister", label: "fails" },
+      ],
+    },
+  },
+
+  // ───────────────────────────────────────── Service Mesh
+  {
+    id: "service-mesh",
+    name: "Service Mesh",
+    category: "traffic",
+    icon: "Waypoints",
+    tagline: "Infrastructure-layer networking for microservices.",
+    mentalModel: "A postal system — you drop a letter in the mailbox and the postal service handles routing, tracking, insurance, and delivery confirmation. You don't build your own delivery network; the infrastructure does it transparently.",
+    misconception: {
+      myth: "A service mesh replaces your application's networking code.",
+      reality: "A service mesh handles cross-cutting concerns (mTLS, retries, observability, traffic shifting) at the infrastructure layer, but your application still owns its business logic, error handling, and API contracts. The mesh handles the plumbing, not the logic.",
+    },
+    consequenceIfRemoved: "Every service must implement its own mTLS, retries, circuit breaking, tracing and traffic shifting — in every language, in every service. Cross-cutting networking concerns are duplicated, inconsistent, and impossible to manage centrally.",
+    definition:
+      "A service mesh is a dedicated infrastructure layer that handles service-to-service communication — providing mTLS encryption, load balancing, retries, circuit breaking, observability and traffic management through sidecar proxies deployed alongside every service instance.",
+    whyItExists:
+      "As microservices multiply, cross-cutting networking concerns (security, observability, traffic control) become impossible to implement consistently in application code across teams and languages. A service mesh extracts these concerns into infrastructure, enforcing them uniformly and centrally.",
+    problemSolved:
+      "Provides consistent, centrally managed service-to-service security (mTLS), observability (distributed tracing, metrics), and traffic management (canary, retries, circuit breaking) without requiring application code changes.",
+    advantages: [
+      "Zero-trust networking: mTLS between all services, enforced by infrastructure, not application code",
+      "Uniform observability: every request is traced and metered without instrumenting each service individually",
+      "Traffic management: canary releases, fault injection and traffic shifting configured declaratively",
+      "Language-agnostic: works with any language or framework since the sidecar handles networking transparently",
+    ],
+    disadvantages: [
+      "Adds latency: every request passes through two sidecar proxies (source and destination), adding 1-3ms per hop",
+      "Operational complexity: the control plane (Istio, Linkerd) is another distributed system to deploy and manage",
+      "Resource overhead: each sidecar consumes CPU and memory, multiplied by every pod in the cluster",
+      "Debugging is harder: network issues now involve sidecar proxy logs, control plane config and data plane behavior",
+    ],
+    whenToUse:
+      "In large microservices deployments (dozens to hundreds of services) where consistent mTLS, observability and traffic management across teams and languages justifies the infrastructure cost. Especially valuable in zero-trust security environments.",
+    whenNotToUse:
+      "For a small number of services (under 10) where a shared library or API gateway handles cross-cutting concerns adequately. The operational overhead of a mesh isn't justified until the number of services and teams makes library-based approaches unmanageable.",
+    alternatives: [
+      { name: "Shared libraries", note: "Resilience4j, Polly — implement retries and circuit breaking in code, per-language" },
+      { name: "API gateway only", note: "Handles north-south traffic; east-west goes direct without mesh overhead" },
+      { name: "eBPF-based networking", note: "Cilium — kernel-level networking without sidecar proxies, lower overhead" },
+    ],
+    realWorld: [
+      "Istio + Envoy — the most widely adopted service mesh, used by Google, eBay and Airbnb",
+      "Linkerd — lightweight, Rust-based mesh focused on simplicity and performance",
+      "AWS App Mesh — managed service mesh for ECS and EKS workloads",
+    ],
+    interviewQuestions: [
+      "What does a sidecar proxy do, and why is it deployed per-pod instead of per-node?",
+      "How does a service mesh enable mTLS without application code changes?",
+      "When is a service mesh overkill, and what would you use instead?",
+    ],
+    scaling:
+      "The data plane (sidecars) scales linearly with the number of pods — each pod gets its own proxy. The control plane must handle configuration distribution to all sidecars; scale it by running multiple replicas and using incremental config pushes (xDS in Envoy). Latency overhead is bounded per hop (1-3ms), not per cluster size.",
+    relatedConcepts: ["load-balancer", "circuit-breaker", "observability"],
+    sources: [
+      { label: "Istio — Architecture", url: "https://istio.io/latest/docs/ops/deployment/architecture/" },
+      { label: "Linkerd — Service Mesh Explained", url: "https://linkerd.io/what-is-a-service-mesh/" },
+      { label: "CNCF — Service Mesh Interface specification", url: "https://smi-spec.io/" },
+    ],
+  },
+
+  // ───────────────────────────────────────── TLS
+  {
+    id: "tls",
+    name: "TLS",
+    category: "networking",
+    icon: "KeyRound",
+    tagline: "Encrypt the wire — trust the other end.",
+    mentalModel: "A sealed envelope with a wax seal — anyone can see an envelope is being delivered, but only the intended recipient can open it, and the seal proves it wasn't tampered with in transit.",
+    misconception: {
+      myth: "TLS only provides encryption.",
+      reality: "TLS provides three guarantees: confidentiality (encryption), integrity (tamper detection via MACs), and authentication (the server proves its identity via a certificate chain). Removing any one of these breaks the security model.",
+    },
+    consequenceIfRemoved: "All data — passwords, tokens, credit card numbers — travels in plaintext. Any network observer (ISP, coffee-shop Wi-Fi, compromised router) can read and modify traffic. Man-in-the-middle attacks become trivial.",
+    definition:
+      "Transport Layer Security is a cryptographic protocol that encrypts communication between two parties, authenticates the server (and optionally the client) via certificates, and ensures data integrity — making eavesdropping, tampering and impersonation detectable.",
+    whyItExists:
+      "The internet was designed without encryption — TCP transmits in plaintext. TLS wraps TCP with encryption and authentication so that data remains confidential and unmodified in transit, even over untrusted networks like public Wi-Fi or shared infrastructure.",
+    problemSolved:
+      "Prevents eavesdropping, tampering and impersonation on network connections, ensuring that data in transit is confidential, intact, and delivered to the authenticated server.",
+    advantages: [
+      "Confidentiality: encrypts all data in transit — eavesdroppers see ciphertext, not content",
+      "Authentication: certificates prove the server's identity, preventing man-in-the-middle attacks",
+      "Integrity: MACs detect any tampering — modified packets are rejected, not silently delivered",
+      "TLS 1.3 reduces handshake to 1-RTT (0-RTT for resumption), minimizing latency overhead",
+    ],
+    disadvantages: [
+      "Certificate management: issuance, renewal, revocation and rotation are operationally complex at scale",
+      "TLS termination adds CPU overhead for encryption/decryption (mitigated by hardware acceleration)",
+      "Debugging encrypted traffic requires access to keys or TLS-terminating proxies — no more casual tcpdump",
+      "Misconfiguration (weak ciphers, expired certs, missing intermediates) silently degrades security",
+    ],
+    whenToUse:
+      "Everywhere. All HTTP should be HTTPS. All internal service-to-service communication should use mTLS in zero-trust environments. The question is where to terminate TLS (edge, load balancer, or sidecar), not whether to use it.",
+    whenNotToUse:
+      "There are almost no valid reasons to skip TLS in production. The only exceptions are purely internal, isolated networks where performance testing requires plaintext — and even then, prefer mTLS with sidecar termination. 'It's internal' is not a sufficient reason.",
+    alternatives: [
+      { name: "IPsec", note: "Network-layer encryption — encrypts all traffic between hosts, not per-connection" },
+      { name: "WireGuard", note: "Modern VPN protocol — simpler than IPsec, encrypts at the tunnel level" },
+      { name: "Application-layer encryption", note: "Encrypt payloads before sending — end-to-end, independent of transport" },
+    ],
+    realWorld: [
+      "HTTPS everywhere — Let's Encrypt issuing free certificates, making TLS the default for the web",
+      "mTLS in service meshes (Istio, Linkerd) — mutual authentication between all internal services",
+      "TLS 1.3 adoption by Cloudflare, Google, and all major CDNs for faster, safer handshakes",
+    ],
+    interviewQuestions: [
+      "Walk through a TLS 1.3 handshake — what happens in each round-trip?",
+      "What's the difference between TLS termination at the load balancer vs end-to-end encryption?",
+      "How does certificate pinning work, and what are its risks?",
+    ],
+    scaling:
+      "TLS termination is CPU-intensive but well-optimized with AES-NI hardware acceleration. Terminate at the edge (CDN, load balancer) to offload backend services. Session resumption and 0-RTT (TLS 1.3) reduce handshake overhead for returning clients. Certificate management scales with automation (cert-manager, ACME/Let's Encrypt).",
+    relatedConcepts: ["tcp", "http", "reverse-proxy"],
+    sources: [
+      { label: "RFC 8446 — TLS 1.3", url: "https://www.rfc-editor.org/rfc/rfc8446" },
+      { label: "Cloudflare — How does TLS work?", url: "https://www.cloudflare.com/learning/ssl/transport-layer-security-tls/" },
+      { label: "Let's Encrypt — How It Works", url: "https://letsencrypt.org/how-it-works/" },
+    ],
+    internal: {
+      summary: "The client and server negotiate a cipher, verify the certificate, exchange keys, and switch to encrypted communication.",
+      nodes: [
+        { id: "hello", label: "ClientHello", sublabel: "supported ciphers + random", kind: "start", detail: "The client initiates the handshake by sending its supported cipher suites, TLS version, and a random value. In TLS 1.3, it also sends a key share — speeding up the handshake to 1-RTT." },
+        { id: "server", label: "ServerHello", sublabel: "chosen cipher + cert", kind: "step", detail: "The server picks a cipher suite, sends its certificate (containing its public key), and its own random value. In TLS 1.3, the server also sends its key share, completing the key exchange in this single message." },
+        { id: "verify", label: "Verify Certificate", sublabel: "chain of trust", kind: "decision", detail: "The client verifies the server's certificate: is it signed by a trusted CA? Is it expired? Does the hostname match? If any check fails, the connection is aborted — this is what prevents man-in-the-middle attacks." },
+        { id: "reject", label: "Abort", sublabel: "untrusted cert", kind: "terminal", detail: "Certificate verification failed — the server's identity can't be trusted. The client terminates the connection and shows an error. No data is exchanged." },
+        { id: "keys", label: "Key Exchange", sublabel: "derive session keys", kind: "step", detail: "Both sides derive the same session keys from the key exchange (ECDHE in TLS 1.3). These symmetric keys encrypt all subsequent data. The handshake switches to encrypted mode." },
+        { id: "encrypted", label: "Encrypted Channel", sublabel: "application data flows", kind: "terminal", detail: "The TLS handshake is complete. All application data (HTTP requests, API calls) now flows over the encrypted channel. Both sides can detect tampering via MACs on every record." },
+      ],
+      edges: [
+        { source: "hello", target: "server" },
+        { source: "server", target: "verify" },
+        { source: "verify", target: "reject", label: "fail" },
+        { source: "verify", target: "keys", label: "pass" },
+        { source: "keys", target: "encrypted" },
+      ],
+    },
+  },
+
+  // ───────────────────────────────────────── Deployment Strategies
+  {
+    id: "deployments",
+    name: "Deployment Strategies",
+    category: "reliability",
+    icon: "Rocket",
+    tagline: "Ship safely — roll out, don't yolo.",
+    mentalModel: "A pilot run at a factory — before switching the whole assembly line to a new process, you run it on one station first. If quality holds, you expand; if defects appear, you revert before the whole line is affected.",
+    misconception: {
+      myth: "Blue/green deployment means zero downtime and zero risk.",
+      reality: "Blue/green eliminates downtime during the switch, but the risk is proportional to traffic — the instant you flip to green, 100% of users hit the new version. A canary is safer because it exposes the change to a small percentage first.",
+    },
+    consequenceIfRemoved: "Every deploy is all-or-nothing. A bad release hits 100% of users immediately with no automated rollback path. Deployments become high-stress events that teams batch and delay, slowing delivery velocity and increasing risk per release.",
+    definition:
+      "Deployment strategies are techniques for releasing new versions of software with controlled risk — blue/green swaps environments atomically, canary releases to a small percentage first, rolling updates replace instances gradually, and feature flags decouple deploy from release.",
+    whyItExists:
+      "Deploying software is inherently risky — bugs slip through tests, performance degrades under real traffic, and edge cases only appear in production. Deployment strategies reduce blast radius by controlling how much traffic sees the new version and how quickly you can revert.",
+    problemSolved:
+      "Reduces deployment risk by controlling the blast radius of a new release — from a small canary slice to a full rollout — with automated rollback when metrics degrade.",
+    advantages: [
+      "Canary limits blast radius — a bug in the new version affects 5% of traffic, not 100%",
+      "Blue/green enables instant rollback — switch traffic back to the old environment in seconds",
+      "Rolling updates require no extra infrastructure — replace instances one by one within the existing fleet",
+      "Feature flags decouple deployment from release — deploy dark code and enable it independently",
+    ],
+    disadvantages: [
+      "Blue/green doubles infrastructure cost — you run two full environments simultaneously",
+      "Canary requires traffic splitting and robust monitoring — metrics must detect regressions in the small slice",
+      "Database schema changes are the hard part — the old and new versions must be compatible with the same schema",
+      "Rolling updates create a mixed-version window where old and new instances serve simultaneously",
+    ],
+    whenToUse:
+      "For any production deployment where risk matters. Canary for gradual validation with real traffic; blue/green for instant cutover and rollback; rolling updates for stateless services in orchestrated environments (Kubernetes); feature flags for decoupling deploy from release.",
+    whenNotToUse:
+      "For development and staging environments where fast, all-at-once deploys are fine. Also, avoid canary releases for changes that must be atomic (e.g. breaking API changes) — either all traffic sees the new version or none does.",
+    alternatives: [
+      { name: "Recreate (big bang)", note: "Stop old, start new — simple but causes downtime" },
+      { name: "Shadow / dark launch", note: "Mirror traffic to the new version without serving responses — test under load without user impact" },
+      { name: "A/B testing", note: "Route subsets of users to different versions to measure business metrics, not just stability" },
+    ],
+    realWorld: [
+      "Kubernetes rolling updates — replace pods one by one with readiness probes gating traffic",
+      "AWS CodeDeploy canary — shift 10% of traffic, monitor, then shift the rest",
+      "LaunchDarkly feature flags decoupling deploy from release across thousands of services",
+    ],
+    interviewQuestions: [
+      "Compare blue/green, canary and rolling deployments — when do you pick each?",
+      "How do you handle database migrations during a canary or blue/green deployment?",
+      "What metrics would you monitor during a canary to decide whether to promote or roll back?",
+    ],
+    scaling:
+      "Blue/green doubles infrastructure during the transition. Canary adds minimal overhead — just a traffic split rule. Rolling updates are the most infrastructure-efficient, replacing instances in-place. Feature flags scale independently of deployment — they're just configuration, checked at runtime.",
+    relatedConcepts: ["load-balancer", "observability", "kubernetes", "feature-flags"],
+    sources: [
+      { label: "Martin Fowler — Blue Green Deployment", url: "https://martinfowler.com/bliki/BlueGreenDeployment.html" },
+      { label: "Kubernetes — Rolling Updates", url: "https://kubernetes.io/docs/tutorials/kubernetes-basics/update/update-intro/" },
+      { label: "AWS — Canary deployments with CodeDeploy", url: "https://docs.aws.amazon.com/codedeploy/latest/userguide/deployment-configurations.html" },
+    ],
+    internal: {
+      summary: "A canary deploy routes a small traffic slice to the new version, monitors for regressions, and gradually expands or rolls back.",
+      nodes: [
+        { id: "build", label: "Build & Test", sublabel: "CI pipeline passes", kind: "start", detail: "The new version passes all CI checks — unit tests, integration tests, linting and security scans. It's a candidate for production, but tests can't catch everything." },
+        { id: "canary", label: "Deploy Canary", sublabel: "5% of traffic", kind: "step", detail: "The new version is deployed alongside the current one, receiving a small slice of real traffic (typically 1-10%). The rest of the traffic continues hitting the old version." },
+        { id: "monitor", label: "Monitor Metrics", sublabel: "errors, latency, p99", kind: "step", detail: "During the canary window, key metrics are compared between the canary and the baseline: error rate, latency percentiles, business metrics (conversion, success rate). Automated analysis can trigger rollback." },
+        { id: "healthy", label: "Canary healthy?", kind: "decision", detail: "Are the canary's metrics within acceptable bounds compared to the baseline? Statistical significance matters — a 5% traffic slice needs enough time to generate meaningful signal." },
+        { id: "expand", label: "Expand Rollout", sublabel: "25% → 50% → 100%", kind: "step", detail: "Canary looks good: expand to a larger traffic slice. This can happen in stages (25%, 50%, 100%) with monitoring at each step, or jump straight to 100% if confidence is high." },
+        { id: "complete", label: "Rollout Complete", sublabel: "100% on new version", kind: "terminal", detail: "All traffic is on the new version. The old version is kept around briefly for instant rollback, then decommissioned. The deploy is successful." },
+        { id: "rollback", label: "Rollback", sublabel: "shift traffic back", kind: "terminal", detail: "Canary metrics degraded: all traffic is shifted back to the old version immediately. The canary is torn down, and the team investigates before retrying." },
+      ],
+      edges: [
+        { source: "build", target: "canary" },
+        { source: "canary", target: "monitor" },
+        { source: "monitor", target: "healthy" },
+        { source: "healthy", target: "expand", label: "yes" },
+        { source: "healthy", target: "rollback", label: "no" },
+        { source: "expand", target: "complete" },
+      ],
+    },
+  },
+
+  // ───────────────────────────────────────── Load Shedding
+  {
+    id: "load-shedding",
+    name: "Load Shedding",
+    category: "reliability",
+    icon: "ShieldOff",
+    tagline: "Drop low-priority work to protect the critical path.",
+    mentalModel: "An emergency room triage nurse — when the ER is overwhelmed, critical patients are treated first and minor complaints are asked to wait or go elsewhere. The system doesn't try to treat everyone equally; it deliberately sacrifices the less important to save the most important.",
+    misconception: {
+      myth: "Load shedding is the same as rate limiting.",
+      reality: "Rate limiting caps request rate regardless of priority. Load shedding selectively drops low-priority requests while continuing to serve high-priority ones — it's about differentiation under overload, not blanket throttling.",
+    },
+    consequenceIfRemoved: "Under overload, all requests degrade equally — critical payment processing competes with background analytics, and the system collapses uniformly instead of protecting its most important functions. A spike in low-value traffic takes down high-value operations.",
+    definition:
+      "Load shedding is the deliberate rejection or deferral of low-priority requests during overload, preserving system capacity for critical operations — choosing partial degradation over total collapse.",
+    whyItExists:
+      "Systems have finite capacity. When demand exceeds supply, you have two choices: degrade everything equally (and risk total failure), or deliberately sacrifice the less important to keep the most important running. Load shedding chooses the latter — it's triage for software.",
+    problemSolved:
+      "Prevents cascading failure during traffic spikes by ensuring critical operations (payments, authentication) continue functioning while non-essential work (analytics, recommendations) is dropped or delayed.",
+    advantages: [
+      "Protects critical-path operations during overload — payments keep processing while analytics are deferred",
+      "Prevents cascading failure: shedding early is better than queuing until everything collapses",
+      "Enables graceful degradation visible to users (e.g. simplified responses) rather than hard errors",
+      "Composable with rate limiting and circuit breaking for layered overload protection",
+    ],
+    disadvantages: [
+      "Requires classifying every request by priority — a design decision that spans the entire system",
+      "Incorrect priority classification means important requests get dropped while unimportant ones proceed",
+      "Customers whose requests are shed experience failures — even if the system is 'healthy' overall",
+      "Testing load shedding under realistic overload conditions is difficult without chaos engineering",
+    ],
+    whenToUse:
+      "When your system has clearly differentiated request priorities and you need to protect critical operations during overload — payment processing, authentication, core reads. Implement at API gateways, load balancers, or within services themselves.",
+    whenNotToUse:
+      "When all requests are equally important (rare in practice) or when the system can simply autoscale to meet demand. Also, don't use load shedding as a substitute for fixing the underlying capacity problem — it's an emergency valve, not a steady-state solution.",
+    alternatives: [
+      { name: "Rate limiting", note: "Cap request rate uniformly — simpler but doesn't differentiate by priority" },
+      { name: "Autoscaling", note: "Add capacity to meet demand — better when possible, but not instant" },
+      { name: "Queue-based smoothing", note: "Buffer requests in a queue and process at sustainable rate" },
+    ],
+    realWorld: [
+      "Google — serving degraded search results (no personalization, no instant) during overload",
+      "Amazon — disabling recommendation widgets during Prime Day spikes to protect checkout",
+      "Netflix — shedding non-essential microservice calls when core streaming is under pressure",
+    ],
+    interviewQuestions: [
+      "How do you decide which requests to shed and which to keep?",
+      "What's the difference between load shedding and rate limiting?",
+      "How would you implement load shedding at the API gateway layer?",
+    ],
+    scaling:
+      "Load shedding is a local decision — each service independently monitors its own capacity (CPU, queue depth, latency) and sheds when thresholds are breached. No central coordination needed. Combine with back-pressure signals to propagate overload information upstream so callers stop sending before requests are shed.",
+    relatedConcepts: ["rate-limiter", "back-pressure", "circuit-breaker"],
+    sources: [
+      { label: "Google SRE — Handling Overload", url: "https://sre.google/sre-book/handling-overload/" },
+      { label: "AWS — Using load shedding to avoid overload", url: "https://aws.amazon.com/builders-library/using-load-shedding-to-avoid-overload/" },
+      { label: "Stripe — Scaling to handle spiky traffic", url: "https://stripe.com/blog/scaling-your-api-with-rate-limiters" },
+    ],
+    internal: {
+      summary: "Incoming requests are classified by priority; when capacity is exceeded, low-priority requests are shed while high-priority ones are admitted.",
+      nodes: [
+        { id: "req", label: "Request Arrives", sublabel: "inbound traffic", kind: "start", detail: "A request hits the service. Before any business logic runs, the load shedding check evaluates whether the system has capacity to handle it." },
+        { id: "classify", label: "Classify Priority", sublabel: "critical / normal / low", kind: "step", detail: "Each request is assigned a priority based on its type, endpoint, customer tier, or headers. Payment requests are critical; analytics pings are low. This classification is the heart of load shedding." },
+        { id: "capacity", label: "Capacity available?", kind: "decision", detail: "The service checks its current load against its capacity threshold — CPU utilization, in-flight request count, queue depth, or response latency. If capacity is available, all requests proceed." },
+        { id: "admit", label: "Admit", sublabel: "process normally", kind: "terminal", detail: "The system has capacity: the request is processed normally regardless of priority. Load shedding is only active during overload." },
+        { id: "priority", label: "Priority high enough?", kind: "decision", detail: "The system is overloaded. Only requests above the current priority threshold are admitted. As load increases, the threshold rises — first shedding low, then normal, keeping only critical." },
+        { id: "process", label: "Process", sublabel: "critical request served", kind: "terminal", detail: "The request's priority is above the threshold: it's admitted and processed. The critical path keeps functioning even while the system is shedding lower-priority work." },
+        { id: "shed", label: "Shed", sublabel: "HTTP 503 / retry-after", kind: "terminal", detail: "The request is below the priority threshold and is rejected with a 503 (or 429) and a Retry-After header. The client knows to back off and try later." },
+      ],
+      edges: [
+        { source: "req", target: "classify" },
+        { source: "classify", target: "capacity" },
+        { source: "capacity", target: "admit", label: "yes" },
+        { source: "capacity", target: "priority", label: "no" },
+        { source: "priority", target: "process", label: "yes" },
+        { source: "priority", target: "shed", label: "no" },
+      ],
+    },
+  },
+
+  // ───────────────────────────────────────── Bloom Filters
+  {
+    id: "bloom-filter",
+    name: "Bloom Filters",
+    category: "data",
+    icon: "Filter",
+    tagline: "Probably yes, definitely no.",
+    mentalModel: "A bouncer with a guest list written in disappearing ink — if your name isn't on the list, you're definitely not getting in. If it looks like your name is there, you probably are, but there's a small chance it's a smudge from someone else's name. Never a false negative, sometimes a false positive.",
+    misconception: {
+      myth: "Bloom filters are just a smaller hash set.",
+      reality: "A hash set gives exact answers and stores the actual elements. A Bloom filter uses far less space but sacrifices certainty — it can tell you 'definitely not in the set' or 'probably in the set', never 'definitely in the set'. You can't enumerate or delete elements from a standard Bloom filter.",
+    },
+    consequenceIfRemoved: "Every membership check becomes a full lookup — a disk read, a database query, or a network call. For workloads where most checks are negative (cache miss, non-existent key), you pay the full lookup cost for every negative answer that a Bloom filter would have short-circuited.",
+    definition:
+      "A Bloom filter is a space-efficient probabilistic data structure that tests whether an element is a member of a set. It can produce false positives (saying 'yes' when the element isn't present) but never false negatives (if it says 'no', the element is definitely absent).",
+    whyItExists:
+      "Checking if a key exists in a large dataset often requires expensive I/O — a disk seek, a database query, a network round-trip. A Bloom filter sits in memory (using far less space than the full dataset) and answers 'definitely not here' instantly, avoiding the expensive lookup for the majority of negative checks.",
+    problemSolved:
+      "Avoids expensive lookups for non-existent keys by providing a fast, memory-efficient 'definitely not' answer — turning O(disk) negative lookups into O(memory) bit checks.",
+    advantages: [
+      "Extremely space-efficient — a few bytes per element, regardless of element size",
+      "O(k) lookup time (k = number of hash functions), typically under a microsecond",
+      "No false negatives: 'not in set' is always correct, making it safe as a pre-filter",
+      "Simple to implement and well-understood — decades of production use",
+    ],
+    disadvantages: [
+      "False positives: 'probably in set' answers require a full lookup to confirm",
+      "Cannot delete elements from a standard Bloom filter (counting Bloom filters can, at higher memory cost)",
+      "Cannot enumerate the elements stored — it's a membership test, not a container",
+      "False positive rate increases as the filter fills — sizing must account for the expected number of elements",
+    ],
+    whenToUse:
+      "As a pre-filter before expensive lookups where most queries are negative — checking if a key exists before hitting disk (LSM-trees), if a URL has been crawled, if a username is taken, or if a request is in a blocklist. The payoff is largest when negative lookups dominate.",
+    whenNotToUse:
+      "When you need exact answers (no false positives tolerable), when you need to delete elements frequently, or when the dataset is small enough to fit in a hash set. Also not useful when most queries are positive — the filter rarely saves work.",
+    alternatives: [
+      { name: "Hash set", note: "Exact membership, but stores full elements — more memory, zero false positives" },
+      { name: "Cuckoo filter", note: "Supports deletion and has better false positive rates at high occupancy" },
+      { name: "Counting Bloom filter", note: "Replaces bits with counters to support deletion, at ~4x memory cost" },
+    ],
+    realWorld: [
+      "LevelDB/RocksDB — Bloom filter per SSTable avoids disk reads for non-existent keys",
+      "Akamai/CDN — Bloom filters check if a URL is in cache before going to disk",
+      "Chrome Safe Browsing — a local Bloom filter checks URLs against a malware blocklist without hitting Google's servers",
+    ],
+    interviewQuestions: [
+      "Why can a Bloom filter have false positives but not false negatives?",
+      "How do you size a Bloom filter — what determines the false positive rate?",
+      "Where would you use a Bloom filter in a distributed key-value store?",
+    ],
+    scaling:
+      "Bloom filter size is O(n) bits where n is the expected number of elements, independent of element size. The false positive rate is tunable: more bits per element = fewer false positives. At 10 bits per element with 7 hash functions, the false positive rate is ~1%. Partitioned Bloom filters distribute across nodes by key range.",
+    relatedConcepts: ["cache", "database", "indexing"],
+    sources: [
+      { label: "Burton H. Bloom — Original paper (1970)", url: "https://dl.acm.org/doi/10.1145/362686.362692" },
+      { label: "LevelDB — Bloom filter implementation", url: "https://github.com/google/leveldb/blob/main/doc/table_format.md" },
+      { label: "Cloudflare — When Bloom filters don't bloom", url: "https://blog.cloudflare.com/when-bloom-filters-dont-bloom/" },
+    ],
+  },
+
+  // ───────────────────────────────────────── CRDTs
+  {
+    id: "crdt",
+    name: "CRDTs",
+    category: "data",
+    icon: "Merge",
+    tagline: "Merge without conflict — by mathematical design.",
+    mentalModel: "A shared whiteboard where everyone has their own copy. People draw independently, and when copies sync up, the whiteboards merge automatically — additions are unioned, and the mathematical properties of the data type guarantee the same result regardless of merge order. No conflicts, no coordinator, no locking.",
+    misconception: {
+      myth: "CRDTs can model any data structure conflict-free.",
+      reality: "CRDTs work for data types with a well-defined merge function (counters, sets, registers, maps). Not every operation can be made conflict-free — some business logic inherently requires coordination (e.g. 'only one person can book this seat'). CRDTs eliminate technical conflicts, not semantic ones.",
+    },
+    consequenceIfRemoved: "Concurrent offline edits conflict and require manual resolution or last-write-wins (which silently drops data). Collaborative editing, offline-first apps, and multi-region active-active writes all become fragile — conflicts are the norm, not the exception.",
+    definition:
+      "Conflict-free Replicated Data Types are data structures designed so that concurrent updates by different replicas can always be merged automatically, producing a consistent result without coordination — guaranteed by the mathematical properties of the merge function (commutativity, associativity, idempotency).",
+    whyItExists:
+      "In distributed systems with multiple writers (multi-region, offline-first, collaborative), concurrent updates to the same data are inevitable. Traditional approaches resolve conflicts with coordination (locks, consensus) or arbitrarily (last-write-wins). CRDTs eliminate the problem by making every concurrent update mergeable by construction.",
+    problemSolved:
+      "Enables concurrent writes from multiple replicas to converge to the same state automatically, without coordination, locks or conflict resolution — making eventual consistency practical and predictable.",
+    advantages: [
+      "No coordination: replicas operate independently and merge later — ideal for offline-first and multi-region",
+      "Guaranteed convergence: all replicas reach the same state regardless of merge order or timing",
+      "No conflicts to resolve: the merge function handles concurrency automatically by mathematical design",
+      "Low latency for writes: no need to contact other replicas before accepting an update",
+    ],
+    disadvantages: [
+      "Limited to data types with a valid merge function — not every domain model maps cleanly to a CRDT",
+      "Metadata overhead: some CRDTs (e.g. OR-Set) carry tombstones or version vectors that grow over time",
+      "Semantic conflicts still possible: two users can both edit the same sentence in a valid but nonsensical way",
+      "Harder to reason about than single-writer models — developers must think in terms of concurrent, eventually-merged states",
+    ],
+    whenToUse:
+      "For collaborative editing (Google Docs, Figma), offline-first applications (mobile, field workers), multi-region active-active replication, and any system where low-latency writes and tolerance of network partitions outweigh the need for strong consistency.",
+    whenNotToUse:
+      "When strong consistency is required (bank balances, inventory counts that must never go negative), when the data model doesn't map to existing CRDT types, or when a single-writer model is sufficient and the CRDT complexity isn't justified.",
+    alternatives: [
+      { name: "Last-write-wins (LWW)", note: "Simple but lossy — silently drops concurrent updates based on timestamp" },
+      { name: "Operational Transformation (OT)", note: "Google Docs' original approach — transforms concurrent operations, but requires a central server" },
+      { name: "Consensus (Raft/Paxos)", note: "Serialize all writes through a leader — strong consistency, but higher latency and partition sensitivity" },
+    ],
+    realWorld: [
+      "Figma — CRDTs power real-time collaborative design with offline support",
+      "Redis CRDT — active-active geo-replicated Redis with conflict-free merging",
+      "Riak — distributed KV store using CRDTs (counters, sets, maps) for multi-datacenter replication",
+    ],
+    interviewQuestions: [
+      "What are the mathematical properties that make CRDTs conflict-free?",
+      "Explain the difference between a G-Counter and a PN-Counter.",
+      "When would you choose CRDTs over consensus-based replication?",
+    ],
+    scaling:
+      "CRDTs scale writes naturally — each replica accepts writes locally and syncs asynchronously. The challenge is metadata: version vectors grow with the number of replicas, and tombstones accumulate in set-based CRDTs. Garbage collection of metadata requires periodic coordination (anti-entropy sessions), which limits the practical number of replicas.",
+    relatedConcepts: ["consistency-models", "base", "cap-theorem"],
+    sources: [
+      { label: "Marc Shapiro et al. — A comprehensive study of CRDTs", url: "https://hal.inria.fr/inria-00555588/document" },
+      { label: "Martin Kleppmann — CRDTs and the Quest for Distributed Consistency (talk)", url: "https://www.youtube.com/watch?v=B5NULPSiOGw" },
+      { label: "Figma — How Figma's multiplayer technology works", url: "https://www.figma.com/blog/how-figmas-multiplayer-technology-works/" },
+    ],
+  },
+
+  // ───────────────────────────────────────── Feature Flags
+  {
+    id: "feature-flags",
+    name: "Feature Flags",
+    category: "application",
+    icon: "ToggleLeft",
+    tagline: "Decouple deployment from release.",
+    mentalModel: "Light switches in a house — every room has its own switch. You can turn on the kitchen light without affecting the bedroom. If a bulb is bad, flip it off instantly without rewiring the house. Deployment installs the wiring; the flag controls whether the light is on.",
+    misconception: {
+      myth: "Feature flags are just if-statements for A/B tests.",
+      reality: "Feature flags serve multiple purposes: release flags (deploy dark, enable later), experiment flags (A/B tests), ops flags (kill switches for degraded features), and permission flags (entitlements per customer). Each has different lifecycle, ownership and cleanup urgency.",
+    },
+    consequenceIfRemoved: "Every feature ships the moment it's deployed — no gradual rollout, no kill switch, no per-customer enablement. A bad feature requires a full rollback (redeploy), not a simple toggle. Deploys and releases become the same event, increasing risk and coupling.",
+    definition:
+      "Feature flags are runtime toggles that control which features are active in a running system — decoupling the act of deploying code from the decision to release it to users, enabling gradual rollouts, instant kill switches, and per-segment targeting without redeploying.",
+    whyItExists:
+      "Deploying code and releasing features are different decisions with different risk profiles. Feature flags let teams deploy continuously (reducing merge conflicts and integration risk) while controlling exactly when, for whom, and how much a feature is exposed — with a kill switch if things go wrong.",
+    problemSolved:
+      "Separates deployment from release, enabling dark launches, gradual rollouts, targeted experiments, and instant feature deactivation — all without redeploying code.",
+    advantages: [
+      "Instant kill switch: disable a feature in seconds without a redeploy or rollback",
+      "Gradual rollout: expose a feature to 1%, then 10%, then 100% — each step validated with real metrics",
+      "Targeted release: enable features per customer, region, plan tier or cohort — powerful for entitlements and experiments",
+      "Trunk-based development: merge to main continuously with features behind flags, avoiding long-lived branches",
+    ],
+    disadvantages: [
+      "Flag debt: abandoned flags accumulate as dead code paths — old flags must be actively cleaned up",
+      "Testing combinatorics: N flags create 2^N possible states — not all combinations are tested",
+      "Runtime complexity: flag evaluation on the hot path adds latency and a dependency on the flag service",
+      "Organizational discipline required: without ownership and expiry policies, flag counts grow unbounded",
+    ],
+    whenToUse:
+      "For any feature where you want to control exposure independently of deployment — new features needing gradual rollout, experiments needing per-segment targeting, operational kill switches for non-critical features under load, and entitlement gating per customer tier.",
+    whenNotToUse:
+      "For trivial, low-risk changes that don't need controlled exposure — not every code change needs a flag. Also avoid for long-lived flags that effectively become permanent configuration; use proper configuration management instead. Clean up flags aggressively after full rollout.",
+    alternatives: [
+      { name: "Branch-based releases", note: "Merge a feature branch when ready to release — simpler but creates long-lived branches and merge conflicts" },
+      { name: "Canary deployments", note: "Deploy the new version to a subset of instances — controls exposure but requires redeployment to change" },
+      { name: "Configuration files", note: "Static config checked into version control — no runtime changes, requires a redeploy" },
+    ],
+    realWorld: [
+      "LaunchDarkly — feature management platform used by thousands of teams for rollouts, experiments and entitlements",
+      "GitHub — ships features behind flags, enabling gradual rollout to millions of users with instant rollback",
+      "Netflix — uses feature flags to disable non-critical features during peak load (a form of load shedding)",
+    ],
+    interviewQuestions: [
+      "What are the different types of feature flags, and how do their lifecycles differ?",
+      "How do you prevent feature flag debt from accumulating in a codebase?",
+      "How do feature flags interact with deployment strategies like canary releases?",
+    ],
+    scaling:
+      "Flag evaluation must be fast — typically cached locally with millisecond-latency lookups. The flag management service (LaunchDarkly, Unleash, custom) streams updates to clients via SSE or WebSockets, so flag changes propagate in seconds without polling. Flag count scales with feature velocity; discipline around cleanup keeps it bounded.",
+    relatedConcepts: ["deployments", "services", "observability"],
+    sources: [
+      { label: "Martin Fowler — Feature Toggles", url: "https://martinfowler.com/articles/feature-toggles.html" },
+      { label: "LaunchDarkly — Feature Flag Best Practices", url: "https://launchdarkly.com/blog/feature-flag-best-practices/" },
+      { label: "Pete Hodgson — Feature Toggles (Feature Flags)", url: "https://www.martinfowler.com/articles/feature-toggles.html" },
     ],
   },
 ];

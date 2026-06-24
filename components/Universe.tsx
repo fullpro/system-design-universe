@@ -18,6 +18,7 @@ import { Legend } from "./panels/Legend";
 import { LearnGallery } from "./panels/LearnGallery";
 import { ReasonWorkspace } from "./reason/ReasonWorkspace";
 import { Studio } from "./studio/Studio";
+import { AtlasWorkspace } from "./atlas/AtlasWorkspace";
 import { Onboarding } from "./panels/Onboarding";
 import { CommandPalette } from "./panels/CommandPalette";
 
@@ -90,7 +91,7 @@ export function Universe() {
     <main className="relative w-screen overflow-hidden" style={{ height: "100dvh" }}>
       <div className="universe-bg" />
 
-      {mode !== "learn" && mode !== "reason" && mode !== "studio" && (
+      {mode !== "learn" && mode !== "reason" && mode !== "studio" && mode !== "atlas" && (
         <div className="absolute" style={canvasInset}>
           <ReactFlowProvider>
             <Canvas />
@@ -101,6 +102,7 @@ export function Universe() {
       {mode === "learn" && <LearnGallery />}
       {mode === "reason" && <ReasonWorkspace />}
       {mode === "studio" && <Studio />}
+      {mode === "atlas" && <AtlasWorkspace />}
 
       <TopBar />
 

@@ -58,6 +58,9 @@ export const SIM_SOLUTIONS: Solution[] = [
   { id: "replicas", conceptId: "read-replica", name: "Read Replicas", effect: "Adds read-only copies of the database, multiplying read capacity ~3×." },
   { id: "queue", conceptId: "message-queue", name: "Message Queue", effect: "Smooths write spikes by processing them asynchronously, shaving ~30% off write pressure." },
   { id: "sharding", conceptId: "sharding", name: "Sharding", effect: "Partitions the database across machines, roughly tripling write capacity." },
+  { id: "rate-limiter", conceptId: "rate-limiter", name: "Rate Limiting", effect: "Rejects excess traffic at the gateway, protecting downstream from overload spikes." },
+  { id: "indexing", conceptId: "indexing", name: "DB Indexing", effect: "Turns O(n) table scans into O(log n) lookups, cutting per-query cost ~60%." },
+  { id: "autoscale", conceptId: "kubernetes", name: "Autoscaling", effect: "Automatically adds app server instances when CPU exceeds threshold, ~2× elastic capacity." },
 ];
 
 export interface SimNodeDef {
@@ -79,6 +82,7 @@ export const SIM_NODES: SimNodeDef[] = [
   { id: "queue", gatedBy: "queue", x: 580, y: 370, conceptId: "message-queue" },
   { id: "db", gatedBy: null, x: 310, y: 570, conceptId: "database" },
   { id: "replica", gatedBy: "replicas", x: 30, y: 570, conceptId: "read-replica" },
+  { id: "rate-limiter", gatedBy: "rate-limiter", x: 580, y: 180, conceptId: "rate-limiter" },
 ];
 
 export type HeatStatus = "idle" | "healthy" | "warm" | "hot" | "critical" | "support";
@@ -125,25 +129,35 @@ function has(sols: Set<string>, id: string): boolean {
   return sols.has(id);
 }
 
+/** Clip demand if rate limiting is active — excess is shed as 429s. */
+function effectiveDemand(demand: number, sols: Set<string>): number {
+  if (has(sols, "rate-limiter") && demand > 0.9) return 0.9;
+  return demand;
+}
+
 /** Heat of the application tier. */
 function appHeat(demand: number, sols: Set<string>): number {
-  const capacity = has(sols, "loadbalancer") ? 4 : 1;
+  const d = effectiveDemand(demand, sols);
+  const capacity = has(sols, "loadbalancer") ? (has(sols, "autoscale") ? 8 : 4) : 1;
   const offload = has(sols, "cdn") ? 0.6 : 1;
-  return (demand * offload) / capacity;
+  return (d * offload) / capacity;
 }
 
 /** Read-path heat on the database. */
 function dbReadHeat(demand: number, sols: Set<string>): number {
+  const d = effectiveDemand(demand, sols);
   const reduction = (has(sols, "cache") ? 0.25 : 1) * (has(sols, "cdn") ? 0.85 : 1);
+  const indexFactor = has(sols, "indexing") ? 0.6 : 1;
   const capacity = 1 + (has(sols, "replicas") ? 2 : 0);
-  return (demand * reduction) / capacity;
+  return (d * reduction * indexFactor) / capacity;
 }
 
 /** Write-path heat on the database. */
 function dbWriteHeat(demand: number, sols: Set<string>): number {
+  const d = effectiveDemand(demand, sols);
   const reduction = has(sols, "queue") ? 0.7 : 1;
   const capacity = has(sols, "sharding") ? 3 : 1;
-  return (demand * reduction) / capacity;
+  return (d * reduction) / capacity;
 }
 
 function dbHeat(demand: number, sols: Set<string>): number {
@@ -192,6 +206,9 @@ function handlesFor(source: string, target: string): Pick<SimEdgeState, "sourceH
     "queue>db": ["sb", "tr"],
     "app>db": ["sb", "tt"],
     "db>replica": ["sl", "tr"],
+    "client>rate-limiter": ["sr", "tl"],
+    "rate-limiter>lb": ["sb", "tt"],
+    "rate-limiter>app": ["sb", "tt"],
   };
   const [sh, th] = map[`${source}>${target}`] ?? ["sb", "tt"];
   return { sourceHandle: sh, targetHandle: th };
@@ -222,13 +239,13 @@ export function computeSimulation(tierIndex: number, sols: Set<string>): Simulat
         status = "idle";
         break;
       case "app":
-        label = has(sols, "loadbalancer") ? "App Servers ×4" : "App Server";
+        label = has(sols, "autoscale") ? "App Servers ×8 (auto)" : has(sols, "loadbalancer") ? "App Servers ×4" : "App Server";
         heat = aHeat;
         status = statusFor(aHeat);
         sublabel = `load ${Math.round(aHeat * 100)}%`;
         break;
       case "db":
-        label = has(sols, "sharding") ? "Database · sharded ×3" : "Database";
+        label = has(sols, "sharding") ? "Database · sharded ×3" : has(sols, "indexing") ? "Database · indexed" : "Database";
         heat = dHeat;
         status = statusFor(dHeat);
         sublabel = `load ${Math.round(dHeat * 100)}%`;
@@ -257,13 +274,24 @@ export function computeSimulation(tierIndex: number, sols: Set<string>): Simulat
         status = statusFor(qHeat);
         sublabel = qHeat >= 0.6 ? `backlog rising · ${Math.round(qHeat * 100)}%` : `async writes · ${Math.round(qHeat * 100)}%`;
         break;
+      case "rate-limiter":
+        label = "Rate Limiter";
+        sublabel = demand > 0.9 ? "shedding excess" : "protecting capacity";
+        break;
     }
     return { id: n.id, label, sublabel, x: n.x, y: n.y, status, heat, conceptId: n.conceptId };
   });
 
   // Build edges from the active topology.
   const rawEdges: Array<[string, string, boolean?, string?]> = [];
-  if (has(sols, "loadbalancer")) {
+  if (has(sols, "rate-limiter")) {
+    rawEdges.push(["client", "rate-limiter"]);
+    if (has(sols, "loadbalancer")) {
+      rawEdges.push(["rate-limiter", "lb"], ["lb", "app"]);
+    } else {
+      rawEdges.push(["rate-limiter", "app"]);
+    }
+  } else if (has(sols, "loadbalancer")) {
     rawEdges.push(["client", "lb"], ["lb", "app"]);
   } else {
     rawEdges.push(["client", "app"]);
@@ -340,7 +368,9 @@ export function computeSimulation(tierIndex: number, sols: Set<string>): Simulat
   // A single cache you depend on is a new failure mode: if it falls over, the
   // unshielded read storm can take the database with it (cache stampede).
   const cacheAvail = has(sols, "cache") && !has(sols, "replicas") ? 0.9997 : 1;
-  const availability = appAvail * dbAvail * cacheAvail;
+  // Rate limiting prevents overload from killing availability.
+  const rateLimitBoost = has(sols, "rate-limiter") && demand > 0.9 ? 1.0001 : 1;
+  const availability = Math.min(0.99999, appAvail * dbAvail * cacheAvail * rateLimitBoost);
 
   // Secondary observations — the realism the single bottleneck doesn't capture.
   const notes: string[] = [];
@@ -350,6 +380,14 @@ export function computeSimulation(tierIndex: number, sols: Set<string>): Simulat
     notes.push(`Queue backlog is rising (~${Math.round(qHeat * 100)}%): workers are draining slower than ingest. More write capacity (sharding) or more workers clears it.`);
   if (has(sols, "cache") && !has(sols, "replicas") && demand >= 0.85)
     notes.push("You depend on a single cache with no replica behind it — if it drops, the read storm hits the database directly.");
+  if (has(sols, "rate-limiter") && demand > 0.9)
+    notes.push("Rate limiting is shedding excess traffic — some requests get 429s, but the system stays healthy instead of collapsing.");
+  if (has(sols, "indexing") && dbReadHeat(demand, sols) < dbReadHeat(demand, new Set([...sols].filter(s => s !== "indexing"))) - 0.1)
+    notes.push("Proper indexes cut per-query cost — the database does less work per read, buying headroom before you need replicas.");
+  if (has(sols, "autoscale") && !has(sols, "loadbalancer"))
+    notes.push("Autoscaling without a load balancer — you can't spread traffic to new instances if there's no balancer to route to them.");
+  if (!has(sols, "rate-limiter") && demand >= 1.0)
+    notes.push("No rate limiting at hyperscale — a retry storm or abusive client could push you past the edge.");
   if (!bottleneck && demand >= 1.0)
     notes.push("Every tier is cooled — but at this scale the real frontier is coordination: hot keys, shard rebalancing and cross-shard queries. No architecture is truly free.");
 
