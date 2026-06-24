@@ -31,6 +31,8 @@ interface Persisted {
   journeyId: string;
   studioNodes: ReturnType<typeof currentSlice>["studioNodes"];
   studioEdges: ReturnType<typeof currentSlice>["studioEdges"];
+  foundationsLevel: number;
+  foundationsCompleted: number[];
 }
 
 function currentSlice() {
@@ -51,6 +53,8 @@ function currentSlice() {
     journeyId: s.journeyId,
     studioNodes: s.studioNodes,
     studioEdges: s.studioEdges,
+    foundationsLevel: s.foundationsLevel,
+    foundationsCompleted: s.foundationsCompleted,
   };
 }
 

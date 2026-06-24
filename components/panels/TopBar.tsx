@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Compass, Gauge, GitBranch, Blocks, GraduationCap, BrainCircuit, Orbit, HelpCircle, X, Search, Share2, Route, Check, Globe } from "lucide-react";
+import { Compass, Gauge, GitBranch, Blocks, GraduationCap, BrainCircuit, Orbit, HelpCircle, X, Search, Share2, Route, Check, Globe, Sparkles } from "lucide-react";
 import { useUniverse } from "@/lib/store";
 import { buildShareUrl } from "@/lib/persistence";
 import type { ViewMode } from "@/lib/types";
@@ -11,6 +11,7 @@ import type { ViewMode } from "@/lib/types";
 // only the active tab shows its label; the icon carries the rest — so the bar
 // never overflows.
 const TABS: { id: ViewMode; label: string; icon: React.ReactNode }[] = [
+  { id: "foundations", label: "Foundations", icon: <Sparkles size={15} /> },
   { id: "map", label: "Explore", icon: <Compass size={15} /> },
   { id: "simulator", label: "Simulate", icon: <Gauge size={15} /> },
   { id: "evolution", label: "Evolve", icon: <GitBranch size={15} /> },
@@ -21,6 +22,7 @@ const TABS: { id: ViewMode; label: string; icon: React.ReactNode }[] = [
 ];
 
 const HELP = [
+  { k: "Foundations", v: "Beginner-friendly, step-by-step lessons that teach system design through problems, not technologies. Start here." },
   { k: "Explore", v: "Pan & zoom the request lifecycle. Click any node for a full lesson, then zoom into its internals." },
   { k: "Simulate", v: "Crank up traffic and watch components overheat. Toggle solutions to relieve the bottleneck." },
   { k: "Evolve", v: "Step a system from one server to multi-region, one scaling decision at a time." },

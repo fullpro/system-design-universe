@@ -76,6 +76,12 @@ interface UniverseState {
   atlasCompanyId: string | null;
   atlasTechId: string | null;
 
+  // Foundations
+  foundationsLevel: number;
+  foundationsStep: number;
+  foundationsQuizActive: boolean;
+  foundationsCompleted: number[];
+
   // Actions
   setCommandOpen: (open: boolean) => void;
   openTool: (id: string) => void;
@@ -126,6 +132,11 @@ interface UniverseState {
   selectAtlasCompany: (id: string | null) => void;
   selectAtlasTech: (id: string | null) => void;
 
+  setFoundationsLevel: (level: number) => void;
+  setFoundationsStep: (step: number) => void;
+  setFoundationsQuizActive: (active: boolean) => void;
+  completeFoundationsLevel: (level: number) => void;
+
   setReasonTab: (tab: ReasonTab) => void;
   setRequirements: (patch: Partial<Requirements>) => void;
   applyRequirements: (values: Requirements) => void;
@@ -167,6 +178,11 @@ export const useUniverse = create<UniverseState>((set) => ({
   atlasTab: "companies",
   atlasCompanyId: null,
   atlasTechId: null,
+
+  foundationsLevel: 1,
+  foundationsStep: 0,
+  foundationsQuizActive: false,
+  foundationsCompleted: [],
 
   reasonTab: "advisor",
   requirements: DEFAULT_REQUIREMENTS,
@@ -327,6 +343,16 @@ export const useUniverse = create<UniverseState>((set) => ({
   setAtlasTab: (tab) => set({ atlasTab: tab, atlasCompanyId: null, atlasTechId: null }),
   selectAtlasCompany: (id) => set({ atlasCompanyId: id }),
   selectAtlasTech: (id) => set({ atlasTechId: id }),
+
+  setFoundationsLevel: (level) => set({ foundationsLevel: level, foundationsStep: 0, foundationsQuizActive: false }),
+  setFoundationsStep: (step) => set({ foundationsStep: step }),
+  setFoundationsQuizActive: (active) => set({ foundationsQuizActive: active }),
+  completeFoundationsLevel: (level) =>
+    set((s) => ({
+      foundationsCompleted: s.foundationsCompleted.includes(level)
+        ? s.foundationsCompleted
+        : [...s.foundationsCompleted, level],
+    })),
 
   setReasonTab: (tab) => set({ reasonTab: tab, selectedConceptId: null }),
   setRequirements: (patch) => set((s) => ({ requirements: { ...s.requirements, ...patch } })),

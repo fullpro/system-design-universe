@@ -21,6 +21,7 @@ import { Studio } from "./studio/Studio";
 import { AtlasWorkspace } from "./atlas/AtlasWorkspace";
 import { Onboarding } from "./panels/Onboarding";
 import { CommandPalette } from "./panels/CommandPalette";
+import { FoundationsWorkspace } from "./foundations/FoundationsWorkspace";
 
 function BottomCTA() {
   const startJourney = useUniverse((s) => s.startJourney);
@@ -91,7 +92,7 @@ export function Universe() {
     <main className="relative w-screen overflow-hidden" style={{ height: "100dvh" }}>
       <div className="universe-bg" />
 
-      {mode !== "learn" && mode !== "reason" && mode !== "studio" && mode !== "atlas" && (
+      {mode !== "learn" && mode !== "reason" && mode !== "studio" && mode !== "atlas" && mode !== "foundations" && (
         <div className="absolute" style={canvasInset}>
           <ReactFlowProvider>
             <Canvas />
@@ -103,6 +104,7 @@ export function Universe() {
       {mode === "reason" && <ReasonWorkspace />}
       {mode === "studio" && <Studio />}
       {mode === "atlas" && <AtlasWorkspace />}
+      {mode === "foundations" && <FoundationsWorkspace />}
 
       <TopBar />
 

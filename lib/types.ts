@@ -168,7 +168,7 @@ export interface Solution {
   effect: string;
 }
 
-export type ViewMode = "map" | "internals" | "simulator" | "evolution" | "learn" | "reason" | "studio" | "atlas";
+export type ViewMode = "map" | "internals" | "simulator" | "evolution" | "learn" | "reason" | "studio" | "atlas" | "foundations";
 
 /** Sub-modes inside the Reasoning Engine workspace. */
 export type ReasonTab = "advisor" | "diagnose" | "tradeoff" | "failure" | "compare" | "interview";

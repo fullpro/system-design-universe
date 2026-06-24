@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Compass, Gauge, GitBranch, Blocks, GraduationCap, BrainCircuit, CornerDownLeft } from "lucide-react";
+import { Search, Compass, Gauge, GitBranch, Blocks, GraduationCap, BrainCircuit, CornerDownLeft, Sparkles } from "lucide-react";
 import { useUniverse } from "@/lib/store";
 import { CONCEPTS, getConcept } from "@/lib/concepts";
 import { CATEGORIES } from "@/lib/categories";
@@ -23,6 +23,7 @@ interface Item {
 }
 
 const MODES: { mode: ViewMode; label: string; hint: string; icon: React.ReactNode }[] = [
+  { mode: "foundations", label: "Foundations", hint: "Beginner system design lessons", icon: <Sparkles size={15} /> },
   { mode: "map", label: "Explore", hint: "The request lifecycle map", icon: <Compass size={15} /> },
   { mode: "simulator", label: "Simulate", hint: "Traffic, heat & bottlenecks", icon: <Gauge size={15} /> },
   { mode: "evolution", label: "Evolve", hint: "Grow a system stage by stage", icon: <GitBranch size={15} /> },
