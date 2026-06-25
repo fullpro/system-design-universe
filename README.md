@@ -87,18 +87,18 @@ backend — content is JSON-driven and shipped statically.
 ## 3 · UI layout (wireframe)
 
 ```
-┌─ brand ─────────────┬──── [Explore][Simulate][Evolve] ────┬─ Guide ─┐
-│                                                                      │
-│ ┌ Legend ┐                                          ┌─ DetailPanel ─┐│
-│ │ layers │              ● animated request           │  icon · name  ││
-│ └────────┘              ●   lifecycle on             │  definition   ││
-│                         ●   infinite canvas          │  why · problem││
-│                         ●                            │  tradeoffs    ││
-│                  [minimap]                [zoom ±]    │  alternatives ││
-│ ┌──────────── SimulatorBar / EvolutionBar ─────────┐ │  interview Qs ││
-│ │ traffic dial · bottleneck · solution toggles     │ └───────────────┘│
+┌─ brand ─────────────┬──── [Explore][Simulate][Evolve] ──────┬─ Guide ─┐
+│                                                                       │
+│ ┌ Legend ┐                                          ┌─ DetailPanel ─┐ │
+│ │ layers │              ● animated request          │  icon · name  │ │
+│ └────────┘              ●   lifecycle on            │  definition   │ │
+│                         ●   infinite canvas         │  why · problem│ │
+│                         ●                           │  tradeoffs    │ │
+│                  [minimap]                [zoom ±]  │  alternatives │ │
+│ ┌──────────── SimulatorBar / EvolutionBar ─────────┐│  interview Qs │ │
+│ │ traffic dial · bottleneck · solution toggles     │└───────────────┘ │
 │ └──────────────────────────────────────────────────┘                  │
-└──────────────────────────────────────────────────────────────────────┘
+└───────────────────────────────────────────────────────────────────────┘
 ```
 
 ## 4 · Data model (`lib/types.ts`)
@@ -175,31 +175,7 @@ The app deliberately teaches in three escalating loops:
 - **Evolution:** stages declare `addNodes / addEdges / removeEdges / labels`; the builder
   folds them cumulatively over fixed positions so new pieces animate into a stable layout.
 
-## 9 · Implementation roadmap
-
-- [x] **v0 — Foundation:** Next.js + React Flow + Tailwind, theme, store, data model.
-- [x] **v1 — World Map:** animated request lifecycle, custom nodes/edges, legend, minimap.
-- [x] **v2 — Lessons:** full educational detail panel for every concept.
-- [x] **v3 — Zoomable internals:** auto-laid-out internal flows with decision branching.
-- [x] **v4 — Scale Simulator:** traffic dial, heat model, bottleneck + counterfactual fixes.
-- [x] **v5 — Evolution mode:** 9-stage cumulative architecture growth.
-- [x] **v6 — Learn / Atlas:** browsable gallery of all ~39 concepts + cross-cutting
-      principles (CAP, consistency, ACID/BASE, scaling, the nines), sourced from the
-      system-design-primer.
-- [x] **v7 — Interactive tools:** Latency Numbers visualizer (human-time scale), CAP
-      Explorer, SQL-vs-NoSQL chooser; Simulator grounded in real p99 latency & availability.
-- [x] **v8 — Guided learning:** narrated **request journey** on the map, hover cards, layer
-      focus; **mental models** + **myth-vs-reality** per concept; internals **step-through**
-      playback with **failure scenarios**; Simulator stress visuals + **before/after**
-      recommendations; Evolve **problem-gating** + **complexity meter**.
-- [x] **v9 — Tools & sandbox:** **Capacity Estimator** (back-of-the-envelope QPS / storage /
-      bandwidth → implied architecture), Consistent-Hashing Ring, Load-Balancer Strategies,
-      Cache Hit-Ratio Simulator; the **Design Studio** — build your own architecture and get
-      a live graded review.
-- [ ] **v10 — Next:** URL-encoded shareable states · command palette (`⌘K`) · guided tours ·
-      per-concept quizzes · user-authored concepts · export a Studio design to the Simulator.
-
-## 10 · Tech stack
+## 9· Tech stack
 
 Next.js 15 (App Router) · React 19 · TypeScript · Tailwind CSS v4 · React Flow
 (`@xyflow/react` v12) · Framer Motion · Zustand · lucide-react. No backend required.
