@@ -9,6 +9,8 @@ It is **not** an interview-prep site, a company-architecture explorer, or a netw
 simulator. It teaches **relationships, tradeoffs, bottlenecks and scaling strategies**
 through visualization and interaction.
 
+🚀 **[Live Demo](https://system-design-universe.vercel.app)** — Start exploring now
+
 ---
 
 ## Quick start
