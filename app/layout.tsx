@@ -5,6 +5,10 @@ export const metadata: Metadata = {
   title: "System Design Universe",
   description:
     "An interactive map for building a complete mental model of modern distributed systems — explore how DNS, CDNs, load balancers, caches, queues, databases and more fit together.",
+  icons: {
+    icon: "/favicon.svg",
+    apple: "/favicon.svg",
+  },
 };
 
 export const viewport: Viewport = {
