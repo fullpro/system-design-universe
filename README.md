@@ -45,19 +45,19 @@ Reason are dedicated surfaces):
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                        Universe (shell)                        │
-│  TopBar (mode switch)   ·   Legend   ·   Guide                 │
+│                        Universe (shell)                      │
+│  TopBar (mode switch)   ·   Legend   ·   Guide               │
 │ ┌──────────────────────────────────────────────────────────┐ │
-│ │                  React Flow infinite canvas               │ │
-│ │   nodeTypes: concept | internal | sim                     │ │
-│ │   edgeTypes: flow (animated bezier + travelling packet)   │ │
+│ │                  React Flow infinite canvas              │ │
+│ │   nodeTypes: concept | internal | sim                    │ │
+│ │   edgeTypes: flow (animated bezier + travelling packet)  │ │
 │ └──────────────────────────────────────────────────────────┘ │
-│  DetailPanel (right drawer)                                    │
-│  SimulatorBar / EvolutionBar / InternalsHeader (per mode)      │
+│  DetailPanel (right drawer)                                  │
+│  SimulatorBar / EvolutionBar / InternalsHeader (per mode)    │
 └──────────────────────────────────────────────────────────────┘
-            ▲                                  ▲
-            │ reads view state                 │ derives graph
-     ┌──────┴───────┐                  ┌────────┴─────────┐
+            ▲                                    ▲
+            │ reads view state                   │ derives graph
+     ┌──────┴────────┐                  ┌────────┴─────────┐
      │  Zustand store│                  │  pure builders   │
      │ (mode, sel,   │                  │  map / internals │
      │  tier, stage) │                  │  sim / evolution │
