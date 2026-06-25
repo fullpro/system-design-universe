@@ -92,7 +92,7 @@ export function TopBar() {
               exit={{ opacity: 0, scale: 0.95, y: 12 }}
               transition={{ type: "spring", stiffness: 320, damping: 30 }}
               onClick={(e) => e.stopPropagation()}
-              className="glass sheen w-full max-w-[420px] rounded-2xl p-5 sm:rounded-3xl sm:p-6"
+              className="glass sheen w-full max-w-[420px] max-h-[90vh] overflow-y-auto rounded-2xl p-5 sm:rounded-3xl sm:p-6"
               style={{ boxShadow: "0 40px 100px -30px rgba(0,0,0,0.9)" }}
             >
               <div className="flex items-center gap-3">
