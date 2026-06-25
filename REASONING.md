@@ -21,10 +21,10 @@ Reason (workspace)
 └─ Tradeoff Lab           priorities   → matcher      → best-fit archetype + ranking
                                    │
                           ┌────────┴─────────┐
-                          │  reasoning core   │  lib/reasoning/
-                          │  axes · scoring · │  (shared by every sub-mode)
-                          │  rules · data     │
-                          └───────────────────┘
+                          │  reasoning core  │  lib/reasoning/
+                          │  axes · scoring ·│  (shared by every sub-mode)
+                          │  rules · data    │
+                          └──────────────────┘
 ```
 
 The **Scoring Engine** (six axes) is the shared currency: the Advisor scores its output, the
@@ -103,34 +103,15 @@ components/reason/
 ```
 Advisor                              Diagnosis                 Tradeoff Lab
 ┌ constraints ┬ recommendation ┐    ┌ scenario ──────────┐    ┌ sliders ┬ best-fit ──┐
-│ presets     │ summary  ▢radar │    │ metric metric tiles│    │ consist │ archetype  │
-│ ▭ users     │ ① Client       │    │ Q: bottleneck?     │    │ avail   │ stack chips│
-│ ▭ rps       │ ② DNS  why…    │    │ ○ option           │    │ latency │ pros  cons │
-│ ▭ r/w       │ ③ CDN  solves… │    │ ○ option ✓         │    │ thrupt  │ ▢radar     │
+│ presets     │ summary  ▢radar│    │ metric metric tiles│    │ consist │ archetype  │
+│ ▭ users     │ ① Client      │    │ Q: bottleneck?     │    │ avail   │ stack chips│
+│ ▭ rps       │ ② DNS  why…   │    │ ○ option           │    │ latency │ pros  cons │
+│ ▭ r/w       │ ③ CDN  solves │    │ ○ option ✓         │    │ thrupt  │ ▢radar     │
 │ ◻ geo       │ …              │    │ ─ root cause       │    │ cost    ├────────────┤
 │ ◻ avail     │ ops layer ▢ ▢  │    │ ─ fixes · lesson   │    │ simple  │ fit ranking│
 └─────────────┴────────────────┘    └────────────────────┘    └─────────┴────────────┘
 ```
 
-## 9 · Incremental roadmap
-
-- [x] **Wave 1 — Reasoning core:** six-axis scoring engine, requirements model, rule engine,
-      radar. Reused everywhere.
-- [x] **Wave 1 — Architecture Advisor:** constraints → ranked, justified architecture.
-- [x] **Wave 1 — Bottleneck Diagnosis:** 8 incident scenarios with root-cause teaching.
-- [x] **Wave 1 — Tradeoff Lab:** priority sliders → best-fit archetype + live ranking.
-- [x] **Wave 2 — Failure Simulator:** 8 failure actions (kill Redis/Kafka/DB/region, disable
-      CDN, partition, inject latency, traffic spike) over a reference graph → live
-      availability/latency/error/throughput, broken & rerouted (failover) edges, cascade and
-      recovery log. `lib/reasoning/failure.ts` + `components/reason/FailureView.tsx`.
-- [x] **Wave 2 — Architecture Comparison:** overlaid radar + characteristics table for
-      Monolith↔Microservices, Postgres↔Cassandra, Kafka↔RabbitMQ, REST↔gRPC, Sync↔Async.
-      `lib/reasoning/comparisons.ts` + `ComparisonView.tsx` (reuses the radar's compare mode).
-- [x] **Wave 2 — Interview Challenge:** 6 exercises (URL Shortener, Instagram Feed, WhatsApp,
-      Uber, YouTube, Notifications). Assemble a design from the palette → `evaluateDesign`
-      scores coverage vs the reference, flags missing essentials (with why), over-engineering
-      and pitfalls. `lib/reasoning/challenges.ts` + `InterviewView.tsx`.
-- [x] **Evolution Timeline** — already shipped as the existing **Evolve** mode.
 
 All six reasoning sub-modes are live under the **Reason** tab. Future: drag-and-drop on the
 Interview canvas, a "diagnosis streak" score, and shareable/URL-encoded designs.
